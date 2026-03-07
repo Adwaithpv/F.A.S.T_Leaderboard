@@ -31,9 +31,13 @@ interface TournamentContextType {
   games: Game[];
   rounds: Round[];
   scores: Scores;
+  roundTeams: Record<string, string[]>;
   updateScore: (gameId: string, roundId: string, teamId: string, score: number) => void;
   getOverallScores: (roundId: string) => { team: Team; total: number; breakdown: { game: Game; score: number }[] }[];
   getGameScores: (gameId: string, roundId: string) => { team: Team; score: number }[];
+  addTeamToRound: (roundId: string, team: Omit<Team, 'id'>) => void;
+  removeTeamFromRound: (roundId: string, teamId: string) => void;
+  updateTeam: (teamId: string, updates: Partial<Team>) => void;
 }
 
 const defaultTeams: Team[] = [
@@ -77,10 +81,19 @@ const generateInitialScores = () => {
 const TournamentContext = createContext<TournamentContextType | null>(null);
 
 export function TournamentProvider({ children }: { children: React.ReactNode }) {
-  const [teams] = useState<Team[]>(defaultTeams);
+  const [teams, setTeams] = useState<Team[]>(defaultTeams);
   const [games] = useState<Game[]>(defaultGames);
   const [rounds] = useState<Round[]>(defaultRounds);
   const [scores, setScores] = useState<Scores>(generateInitialScores());
+  
+  // Default to all default teams being in all rounds
+  const [roundTeams, setRoundTeams] = useState<Record<string, string[]>>(() => {
+    const initial: Record<string, string[]> = {};
+    defaultRounds.forEach(r => {
+      initial[r.id] = defaultTeams.map(t => t.id);
+    });
+    return initial;
+  });
 
   const updateScore = (gameId: string, roundId: string, teamId: string, score: number) => {
     setScores(prev => ({
@@ -96,7 +109,10 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
   };
 
   const getOverallScores = (roundId: string) => {
-    return teams.map(team => {
+    const activeTeamIds = roundTeams[roundId] || [];
+    const activeTeams = teams.filter(t => activeTeamIds.includes(t.id));
+
+    return activeTeams.map(team => {
       let total = 0;
       const breakdown = games.map(game => {
         const score = scores[game.id][roundId][team.id] || 0;
@@ -108,7 +124,10 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
   };
 
   const getGameScores = (gameId: string, roundId: string) => {
-    return teams.map(team => {
+    const activeTeamIds = roundTeams[roundId] || [];
+    const activeTeams = teams.filter(t => activeTeamIds.includes(t.id));
+
+    return activeTeams.map(team => {
       return {
         team,
         score: scores[gameId][roundId][team.id] || 0
@@ -116,14 +135,40 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
     }).sort((a, b) => b.score - a.score);
   };
 
+  const addTeamToRound = (roundId: string, teamData: Omit<Team, 'id'>) => {
+    const newTeamId = `t${Date.now()}`;
+    const newTeam = { id: newTeamId, ...teamData };
+    
+    setTeams(prev => [...prev, newTeam]);
+    setRoundTeams(prev => ({
+      ...prev,
+      [roundId]: [...(prev[roundId] || []), newTeamId]
+    }));
+  };
+
+  const removeTeamFromRound = (roundId: string, teamId: string) => {
+    setRoundTeams(prev => ({
+      ...prev,
+      [roundId]: (prev[roundId] || []).filter(id => id !== teamId)
+    }));
+  };
+
+  const updateTeam = (teamId: string, updates: Partial<Team>) => {
+    setTeams(prev => prev.map(t => t.id === teamId ? { ...t, ...updates } : t));
+  };
+
   const value = {
     teams,
     games,
     rounds,
     scores,
+    roundTeams,
     updateScore,
     getOverallScores,
     getGameScores,
+    addTeamToRound,
+    removeTeamFromRound,
+    updateTeam,
   };
 
   return (
