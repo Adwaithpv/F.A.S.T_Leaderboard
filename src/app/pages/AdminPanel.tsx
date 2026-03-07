@@ -4,7 +4,7 @@ import { useTournament } from '../context/TournamentContext';
 import { NeonButton } from '../components/NeonButton';
 import { cn } from '../components/NeonButton';
 import * as LucideIcons from 'lucide-react';
-import { Save, RefreshCw } from 'lucide-react';
+import { Save, RefreshCw, Settings } from 'lucide-react';
 
 export function AdminPanel() {
   const { games, rounds, teams, scores, updateScore } = useTournament();
@@ -12,6 +12,8 @@ export function AdminPanel() {
   const [selectedRound, setSelectedRound] = useState(rounds[0].id);
   const [selectedGame, setSelectedGame] = useState(games[0].id);
   const [isSaving, setIsSaving] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
   
   const [localScores, setLocalScores] = useState<Record<string, number>>({});
 
@@ -46,6 +48,48 @@ export function AdminPanel() {
 
   const activeGame = games.find(g => g.id === selectedGame)!;
   const GameIcon = (LucideIcons as any)[activeGame.icon.charAt(0).toUpperCase() + activeGame.icon.slice(1).replace(/-./g, x=>x[1].toUpperCase())] || LucideIcons.Gamepad2;
+
+  if (!isAuthenticated) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="max-w-md mx-auto mt-20 p-8 bg-[#111111] border border-[#333333] rounded-xl shadow-[0_0_30px_rgba(0,0,0,0.5)] flex flex-col items-center gap-6 text-center text-white"
+      >
+        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-[#222222] border border-[#333333] shadow-[0_0_15px_rgba(118,185,0,0.2)] text-[#76B900]">
+          <Settings size={32} />
+        </div>
+        <div>
+          <h2 className="text-2xl font-display font-bold uppercase tracking-widest text-[#76B900]">Admin Access</h2>
+          <p className="text-[#A1A1AA] mt-2 font-mono text-xs">RESTRICTED AREA</p>
+        </div>
+        <form 
+          className="w-full flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (passwordInput === "admin123") {
+              setIsAuthenticated(true);
+            } else {
+              alert("Access Denied");
+              setPasswordInput("");
+            }
+          }}
+        >
+          <input 
+            type="password" 
+            placeholder="Enter authorization code"
+            className="w-full bg-[#000000] border border-[#333333] rounded-lg p-3 text-center text-white tracking-widest focus:outline-none focus:border-[#76B900] transition-colors"
+            value={passwordInput}
+            onChange={(e) => setPasswordInput(e.target.value)}
+          />
+          <NeonButton variant="primary" type="submit" className="w-full justify-center">
+            Authenticate
+          </NeonButton>
+        </form>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

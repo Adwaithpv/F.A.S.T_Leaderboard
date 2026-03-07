@@ -20,11 +20,27 @@ export function Layout() {
 
   return (
     <div className="min-h-screen bg-[#000000] text-white selection:bg-[#76B900]/30 overflow-x-hidden">
-      {/* Background Gradients */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#76B900] opacity-5 blur-[150px] rounded-full mix-blend-screen" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-[#76B900] opacity-5 blur-[150px] rounded-full mix-blend-screen" />
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10" />
+      {/* Dynamic Gaming Background */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden bg-[#000000]">
+        {/* Animated Tech Grid */}
+        <div 
+          className="absolute inset-[0] w-[200%] h-[200%] left-[-50%] top-[-50%]" 
+          style={{
+            backgroundImage: `
+              linear-gradient(to right, rgba(118, 185, 0, 0.25) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(118, 185, 0, 0.25) 1px, transparent 1px)
+            `,
+            backgroundSize: '40px 40px',
+            transform: 'perspective(1000px) rotateX(60deg) translateY(-100px) translateZ(-200px)',
+            animation: 'grid-pan 3s linear infinite',
+            maskImage: 'radial-gradient(ellipse 100% 100% at 50% 50%, black 10%, transparent 60%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 100% 100% at 50% 50%, black 10%, transparent 60%)'
+          }}
+        />
+        {/* Ambient Glow */}
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#76B900] opacity-[0.05] blur-[100px] rounded-full mix-blend-screen" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-[#76B900] opacity-[0.05] blur-[100px] rounded-full mix-blend-screen" />
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30 mix-blend-overlay" />
       </div>
 
       <header className="relative z-10 border-b border-[#333333]/50 bg-[#0A0A0A]/80 backdrop-blur-xl sticky top-0">
@@ -38,7 +54,7 @@ export function Layout() {
                 </div>
               </div>
               <h1 className="text-2xl font-bold font-display tracking-widest text-[#FFFFFF] drop-shadow-[0_0_8px_rgba(118,185,0,0.5)]">
-                NVI LEADERBOARD
+                FASTATHON LEADERBOARD
               </h1>
             </div>
 
