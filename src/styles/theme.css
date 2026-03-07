@@ -1,0 +1,153 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+  --background: #0B0F1A;
+  --foreground: #F8F9FA;
+  --card: #141A29;
+  --card-foreground: #F8F9FA;
+  --popover: #141A29;
+  --popover-foreground: #F8F9FA;
+  --primary: #00F0FF;
+  --primary-foreground: #000000;
+  --secondary: #1F2937;
+  --secondary-foreground: #00F0FF;
+  --muted: #1F2937;
+  --muted-foreground: #9CA3AF;
+  --accent: #2D3748;
+  --accent-foreground: #F8F9FA;
+  --destructive: #FF00FF;
+  --destructive-foreground: #FFFFFF;
+  --border: #1F2937;
+  --input: transparent;
+  --input-background: #141A29;
+  --switch-background: #2D3748;
+  --font-weight-medium: 600;
+  --font-weight-normal: 400;
+  --ring: #00F0FF;
+  --chart-1: #00F0FF;
+  --chart-2: #FF00FF;
+  --chart-3: #8A2BE2;
+  --chart-4: #0055FF;
+  --chart-5: #FFD700;
+  --radius: 0.5rem;
+  --sidebar: #0B0F1A;
+  --sidebar-foreground: #F8F9FA;
+  --sidebar-primary: #00F0FF;
+  --sidebar-primary-foreground: #0B0F1A;
+  --sidebar-accent: #1F2937;
+  --sidebar-accent-foreground: #F8F9FA;
+  --sidebar-border: #1F2937;
+  --sidebar-ring: #00F0FF;
+}
+
+@theme inline {
+  --font-sans: 'Space Grotesk', sans-serif;
+  --font-display: 'Rajdhani', sans-serif;
+  
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-wide uppercase;
+  }
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  h1 {
+    font-size: var(--text-4xl);
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  h2 {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  h3 {
+    font-size: var(--text-xl);
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  h4 {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    line-height: 1.5;
+  }
+
+  label {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  button {
+    font-size: var(--text-base);
+    font-weight: 600;
+    line-height: 1.5;
+    @apply font-display tracking-widest uppercase;
+  }
+
+  input {
+    font-size: var(--text-base);
+    font-weight: 400;
+    line-height: 1.5;
+  }
+}
