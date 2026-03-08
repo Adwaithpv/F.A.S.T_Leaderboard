@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useTournament } from '../context/TournamentContext';
 import { LeaderboardCard } from '../components/LeaderboardCard';
 import { cn } from '../components/NeonButton';
-import { ExportButtons } from '../components/ExportButtons';
+import { ExportDropdown } from '../components/ExportDropdown';
+import { exportOverviewPDF, exportOverviewXML, OverviewAllRoundsEntry } from '../components/exportLeaderboard';
 
 export function Overview() {
   const { rounds, getOverallScores } = useTournament();
@@ -12,15 +13,20 @@ export function Overview() {
   const overallScores = getOverallScores(selectedRound);
   const maxScore = Math.max(...overallScores.map(s => s.total), 4000);
 
-  // Shape data for export utilities
-  const exportEntries = overallScores.map((item, index) => ({
-    rank: index + 1,
-    team: item.team,
-    total: item.total,
-    breakdown: item.breakdown,
-  }));
-
-  const selectedRoundName = rounds.find(r => r.id === selectedRound)?.name ?? 'Round';
+  // Build all-rounds entries for export
+  const allRoundsEntries: OverviewAllRoundsEntry[] = (() => {
+    // Get all teams from first round as base
+    const baseScores = getOverallScores(rounds[0].id);
+    return baseScores.map(({ team }) => {
+      const roundTotals = rounds.map(r => {
+        const roundScores = getOverallScores(r.id);
+        const found = roundScores.find(s => s.team.id === team.id);
+        return { roundName: r.name, total: found?.total ?? 0 };
+      });
+      const grandTotal = roundTotals.reduce((sum, r) => sum + r.total, 0);
+      return { team, roundTotals, grandTotal };
+    });
+  })();
 
   return (
     <motion.div
@@ -39,11 +45,11 @@ export function Overview() {
         </div>
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          {/* Export Buttons */}
-          <ExportButtons
-            entries={exportEntries}
-            roundName={selectedRoundName}
-            eventName="FASTATHON HACKATHON"
+          {/* Download Results Dropdown */}
+          <ExportDropdown
+            accentColor="#76B900"
+            onExportPDF={() => exportOverviewPDF(allRoundsEntries, 'FASTATHON')}
+            onExportXML={() => exportOverviewXML(allRoundsEntries, 'FASTATHON')}
           />
 
           {/* Round Selector */}
