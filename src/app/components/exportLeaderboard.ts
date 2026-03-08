@@ -1,12 +1,5 @@
 import { Team, Game } from '../context/TournamentContext';
 
-export type LeaderboardEntry = {
-  rank: number;
-  team: Team;
-  total: number;
-  breakdown: { game: Game; score: number }[];
-};
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function slugify(s: string) {
@@ -24,8 +17,6 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-// ── XML Export ───────────────────────────────────────────────────────────────
-
 function escapeXML(value: string | number): string {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -35,47 +26,14 @@ function escapeXML(value: string | number): string {
     .replace(/'/g, '&apos;');
 }
 
-export function exportToXML(
-  entries: LeaderboardEntry[],
-  roundName: string,
-  eventName = 'HackClub Hackathon'
-): void {
-  const timestamp = new Date().toISOString();
-
-  const teamNodes = entries
-    .map(({ rank, team, total, breakdown }) => {
-      const gameNodes = breakdown
-        .map(
-          ({ game, score }) =>
-            `      <game id="${escapeXML(game.id)}" name="${escapeXML(game.name)}" score="${score}" />`
-        )
-        .join('\n');
-
-      return `  <team rank="${rank}" id="${escapeXML(team.id)}">
-    <name>${escapeXML(team.name)}</name>
-    <totalScore>${total}</totalScore>
-    <games>
-${gameNodes}
-    </games>
-  </team>`;
-    })
-    .join('\n');
-
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<leaderboard
-  event="${escapeXML(eventName)}"
-  round="${escapeXML(roundName)}"
-  exportedAt="${timestamp}"
-  totalTeams="${entries.length}"
->
-${teamNodes}
-</leaderboard>`;
-
-  const blob = new Blob([xml], { type: 'application/xml;charset=utf-8' });
-  triggerDownload(blob, `${slugify(eventName)}_${slugify(roundName)}_results.xml`);
+function truncate(str: string, max: number): string {
+  return str.length > max ? str.slice(0, max - 1) + '…' : str;
 }
 
-// ── PDF Export (canvas-based, zero dependencies) ─────────────────────────────
+function rankLabel(rank: number): string {
+  const s: Record<number, string> = { 1: 'st', 2: 'nd', 3: 'rd' };
+  return `${rank}${s[rank] ?? 'th'}`;
+}
 
 const PDF_COLORS = {
   bg: '#080c1a',
@@ -85,9 +43,7 @@ const PDF_COLORS = {
   gold: '#FFD700',
   silver: '#C0C0C0',
   bronze: '#CD7F32',
-  accent: '#76B900',
   scoreGreen: '#5be8a8',
-  mutedBlue: '#7a8dbb',
   text: '#dde4f5',
   subText: '#6a7a9f',
   border: '#1e2845',
@@ -99,215 +55,270 @@ const RANK_COLORS: Record<number, string> = {
   3: PDF_COLORS.bronze,
 };
 
-function rankLabel(rank: number): string {
-  const suffixes: Record<number, string> = { 1: 'st', 2: 'nd', 3: 'rd' };
-  return `${rank}${suffixes[rank] ?? 'th'}`;
+// ── Canvas → PDF ─────────────────────────────────────────────────────────────
+
+function buildPDFFromCanvas(canvas: HTMLCanvasElement): Promise<Uint8Array> {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        const imgBytes = atob(base64);
+        const imgLen = imgBytes.length;
+        const W = canvas.width, H = canvas.height;
+        const ptW = 595;
+        const ptH = Math.round((H / W) * ptW);
+        const enc = new TextEncoder();
+        const parts: Uint8Array[] = [];
+        const offsets: number[] = [];
+        let byteLen = 0;
+
+        const push = (s: string) => { const b = enc.encode(s); parts.push(b); byteLen += b.length; };
+        const pushBytes = (b: Uint8Array) => { parts.push(b); byteLen += b.length; };
+
+        push('%PDF-1.4\n');
+        offsets.push(byteLen); push(`1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n`);
+        offsets.push(byteLen); push(`2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n`);
+        offsets.push(byteLen); push(`3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${ptW} ${ptH}]/Contents 4 0 R/Resources<</XObject<</I 5 0 R>>>>>>endobj\n`);
+        const content = `q ${ptW} 0 0 ${ptH} 0 0 cm /I Do Q`;
+        offsets.push(byteLen); push(`4 0 obj<</Length ${content.length}>>\nstream\n${content}\nendstream\nendobj\n`);
+        offsets.push(byteLen);
+        push(`5 0 obj<</Type/XObject/Subtype/Image/Width ${W}/Height ${H}/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length ${imgLen}>>\nstream\n`);
+        const imgData = new Uint8Array(imgLen);
+        for (let i = 0; i < imgLen; i++) imgData[i] = imgBytes.charCodeAt(i);
+        pushBytes(imgData);
+        push(`\nendstream\nendobj\n`);
+
+        const xrefOffset = byteLen;
+        const xrefLines = offsets.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
+        push(`xref\n0 6\n0000000000 65535 f \n${xrefLines}trailer<</Size 6/Root 1 0 R>>\nstartxref\n${xrefOffset}\n%%EOF`);
+
+        const total = new Uint8Array(byteLen);
+        let off = 0;
+        for (const p of parts) { total.set(p, off); off += p.length; }
+        resolve(total);
+      };
+      reader.readAsDataURL(blob);
+    }, 'image/jpeg', 0.95);
+  });
 }
 
-function truncate(str: string, max: number): string {
-  return str.length > max ? str.slice(0, max - 1) + '…' : str;
-}
-
-function buildPDFFromPNG(pngBase64: string, canvasW: number, canvasH: number): Uint8Array {
-  const imgBytes = atob(pngBase64);
-  const imgLen = imgBytes.length;
-  const ptW = 595;
-  const ptH = Math.round((canvasH / canvasW) * ptW);
-  const enc = new TextEncoder();
-
-  const content = `q ${ptW} 0 0 ${ptH} 0 0 cm /I Do Q`;
-
-  // We'll track byte offsets for xref
-  const parts: (Uint8Array | string)[] = [];
-  const offsets: number[] = [];
-  let byteLen = 0;
-
-  const push = (s: string) => {
-    const b = enc.encode(s);
-    parts.push(b);
-    byteLen += b.length;
-  };
-
-  push('%PDF-1.4\n');
-  offsets.push(byteLen);
-  push(`1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n`);
-  offsets.push(byteLen);
-  push(`2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n`);
-  offsets.push(byteLen);
-  push(`3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${ptW} ${ptH}]/Contents 4 0 R/Resources<</XObject<</I 5 0 R>>>>>>endobj\n`);
-  offsets.push(byteLen);
-  push(`4 0 obj<</Length ${content.length}>>\nstream\n${content}\nendstream\nendobj\n`);
-
-  // Image object
-  offsets.push(byteLen);
-  const imgHeader = `5 0 obj<</Type/XObject/Subtype/Image/Width ${canvasW}/Height ${canvasH}/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length ${imgLen}>>\nstream\n`;
-  push(imgHeader);
-  const imgData = new Uint8Array(imgLen);
-  for (let i = 0; i < imgLen; i++) imgData[i] = imgBytes.charCodeAt(i);
-  parts.push(imgData);
-  byteLen += imgData.length;
-  push(`\nendstream\nendobj\n`);
-
-  const xrefOffset = byteLen;
-  const xrefLines = offsets.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
-  push(`xref\n0 6\n0000000000 65535 f \n${xrefLines}trailer<</Size 6/Root 1 0 R>>\nstartxref\n${xrefOffset}\n%%EOF`);
-
-  // Merge all parts
-  const total = new Uint8Array(byteLen);
-  let offset = 0;
-  for (const part of parts) {
-    const arr = typeof part === 'string' ? enc.encode(part) : part;
-    total.set(arr, offset);
-    offset += arr.length;
-  }
-  return total;
-}
-
-export function exportToPDF(
-  entries: LeaderboardEntry[],
-  roundName: string,
-  eventName = 'HackClub Hackathon'
-): void {
-  const W = 820;
-  const ROW_H = 48;
-  const HEADER_H = 90;
-  const TABLE_HEAD_H = 36;
-  const FOOTER_H = 36;
-  const H = HEADER_H + TABLE_HEAD_H + entries.length * ROW_H + FOOTER_H + 20;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d')!;
-
-  // Background
-  ctx.fillStyle = PDF_COLORS.bg;
-  ctx.fillRect(0, 0, W, H);
-
-  // Header
+function drawHeader(ctx: CanvasRenderingContext2D, W: number, title: string, subtitle: string, accent: string, teamCount: number) {
   ctx.fillStyle = PDF_COLORS.headerBg;
-  ctx.fillRect(0, 0, W, HEADER_H);
-
-  ctx.fillStyle = PDF_COLORS.gold;
-  ctx.font = 'bold 24px Georgia, serif';
+  ctx.fillRect(0, 0, W, 90);
+  ctx.fillStyle = accent;
+  ctx.font = 'bold 22px Georgia, serif';
   ctx.textAlign = 'center';
-  ctx.fillText(eventName, W / 2, 34);
-
-  ctx.fillStyle = PDF_COLORS.accent;
-  ctx.font = 'bold 14px Georgia, serif';
-  ctx.fillText(roundName, W / 2, 58);
-
+  ctx.fillText(title, W / 2, 32);
+  ctx.fillStyle = '#9CA3AF';
+  ctx.font = 'bold 12px Georgia, serif';
+  ctx.fillText(subtitle, W / 2, 54);
   ctx.fillStyle = PDF_COLORS.subText;
-  ctx.font = '12px monospace';
-  ctx.fillText(`Exported: ${new Date().toLocaleString()}  ·  ${entries.length} teams`, W / 2, 78);
-
-  // Separator line
+  ctx.font = '11px monospace';
+  ctx.fillText(`Exported: ${new Date().toLocaleString()}  ·  ${teamCount} teams`, W / 2, 74);
   ctx.strokeStyle = PDF_COLORS.border;
   ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(30, HEADER_H);
-  ctx.lineTo(W - 30, HEADER_H);
-  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(30, 90); ctx.lineTo(W - 30, 90); ctx.stroke();
+}
 
-  // Table header
-  const COLS = { rank: 50, name: 200, games: 460, score: 680, pad: 30 };
-  ctx.fillStyle = '#111827';
-  ctx.fillRect(0, HEADER_H, W, TABLE_HEAD_H);
-
-  ctx.fillStyle = PDF_COLORS.subText;
-  ctx.font = 'bold 11px monospace';
-  ctx.textAlign = 'left';
-
-  const headers = [
-    { label: 'RANK', x: COLS.pad },
-    { label: 'TEAM', x: COLS.rank + 20 },
-    { label: 'GAME BREAKDOWN', x: COLS.games - 220 },
-    { label: 'TOTAL', x: COLS.score, align: 'center' as CanvasTextAlign },
-  ];
-
-  headers.forEach(h => {
-    ctx.textAlign = h.align ?? 'left';
-    ctx.fillText(h.label, h.x, HEADER_H + 22);
-  });
-
-  // Rows
-  entries.forEach(({ rank, team, total, breakdown }, i) => {
-    const y = HEADER_H + TABLE_HEAD_H + i * ROW_H;
-    const rankColor = RANK_COLORS[rank] ?? PDF_COLORS.subText;
-
-    ctx.fillStyle = i % 2 === 0 ? PDF_COLORS.rowEven : PDF_COLORS.rowOdd;
-    ctx.fillRect(0, y, W, ROW_H);
-
-    // Left accent bar for top 3
-    if (rank <= 3) {
-      ctx.fillStyle = rankColor;
-      ctx.fillRect(0, y, 3, ROW_H);
-    }
-
-    const midY = y + ROW_H / 2 + 5;
-
-    // Rank
-    ctx.fillStyle = rankColor;
-    ctx.font = `bold 14px Georgia, serif`;
-    ctx.textAlign = 'left';
-    ctx.fillText(rankLabel(rank), COLS.pad, midY);
-
-    // Team name
-    ctx.fillStyle = rank <= 3 ? rankColor : PDF_COLORS.text;
-    ctx.font = 'bold 14px Georgia, serif';
-    ctx.fillText(truncate(team.name, 20), COLS.rank + 20, midY);
-
-    // Game breakdown — small colored dots + scores
-    let gx = COLS.games - 220;
-    breakdown.forEach(({ game, score }) => {
-      ctx.fillStyle = game.color;
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'left';
-      const label = `${truncate(game.name, 10)}: ${score.toLocaleString()}`;
-      ctx.fillText(label, gx, midY);
-      gx += 148;
-    });
-
-    // Total score
-    ctx.fillStyle = PDF_COLORS.scoreGreen;
-    ctx.font = 'bold 16px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(total.toLocaleString(), COLS.score, midY);
-
-    // Row separator
-    ctx.strokeStyle = PDF_COLORS.border;
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(0, y + ROW_H);
-    ctx.lineTo(W, y + ROW_H);
-    ctx.stroke();
-  });
-
-  // Footer
-  const footerY = HEADER_H + TABLE_HEAD_H + entries.length * ROW_H;
+function drawFooter(ctx: CanvasRenderingContext2D, W: number, footerY: number, text: string) {
   ctx.fillStyle = '#0c1126';
-  ctx.fillRect(0, footerY, W, FOOTER_H + 20);
+  ctx.fillRect(0, footerY, W, 40);
   ctx.fillStyle = PDF_COLORS.subText;
   ctx.font = '11px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(
-    `${eventName} · ${roundName} · Admin Export · ${new Date().toLocaleDateString()}`,
-    W / 2,
-    footerY + 22
-  );
+  ctx.fillText(text, W / 2, footerY + 24);
+}
 
-  // Export canvas → JPEG → PDF
-  canvas.toBlob(blob => {
-    if (!blob) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(',')[1];
-      const pdfBytes = buildPDFFromPNG(base64, W, H);
-      triggerDownload(
-        new Blob([pdfBytes], { type: 'application/pdf' }),
-        `${slugify(eventName)}_${slugify(roundName)}_results.pdf`
-      );
-    };
-    reader.readAsDataURL(blob);
-  }, 'image/jpeg', 0.95);
+// ══════════════════════════════════════════════════════════════════════════════
+// OVERVIEW — all rounds combined
+// ══════════════════════════════════════════════════════════════════════════════
+
+export type OverviewAllRoundsEntry = {
+  team: Team;
+  roundTotals: { roundName: string; total: number }[];
+  grandTotal: number;
+};
+
+export function exportOverviewXML(entries: OverviewAllRoundsEntry[], eventName = 'FASTATHON'): void {
+  const sorted = [...entries].sort((a, b) => b.grandTotal - a.grandTotal);
+
+  const teamNodes = sorted.map((e, i) => {
+    const roundNodes = e.roundTotals
+      .map(r => `      <round name="${escapeXML(r.roundName)}" total="${r.total}" />`)
+      .join('\n');
+    return `  <team rank="${i + 1}" id="${escapeXML(e.team.id)}">
+    <n>${escapeXML(e.team.name)}</n>
+    <grandTotal>${e.grandTotal}</grandTotal>
+    <rounds>\n${roundNodes}\n    </rounds>
+  </team>`;
+  }).join('\n');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<leaderboard event="${escapeXML(eventName)}" type="overview" exportedAt="${new Date().toISOString()}" totalTeams="${entries.length}">
+${teamNodes}
+</leaderboard>`;
+
+  triggerDownload(new Blob([xml], { type: 'application/xml;charset=utf-8' }), `${slugify(eventName)}_overview_all_rounds.xml`);
+}
+
+export async function exportOverviewPDF(entries: OverviewAllRoundsEntry[], eventName = 'FASTATHON'): Promise<void> {
+  const sorted = [...entries].sort((a, b) => b.grandTotal - a.grandTotal);
+  const roundNames = entries[0]?.roundTotals.map(r => r.roundName) ?? [];
+
+  const W = 860, ROW_H = 50, HEADER_H = 90, TABLE_HEAD_H = 36, FOOTER_H = 40;
+  const H = HEADER_H + TABLE_HEAD_H + sorted.length * ROW_H + FOOTER_H;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.fillStyle = PDF_COLORS.bg; ctx.fillRect(0, 0, W, H);
+  drawHeader(ctx, W, eventName, 'GLOBAL RANKINGS — ALL ROUNDS', PDF_COLORS.gold, sorted.length);
+
+  ctx.fillStyle = '#111827'; ctx.fillRect(0, HEADER_H, W, TABLE_HEAD_H);
+  ctx.fillStyle = PDF_COLORS.subText; ctx.font = 'bold 11px monospace';
+
+  const colRank = 30, colName = 90, colRounds = 290, colTotal = 790;
+  const roundColW = (colTotal - colRounds - 40) / roundNames.length;
+
+  ctx.textAlign = 'left';
+  ctx.fillText('RANK', colRank, HEADER_H + 22);
+  ctx.fillText('TEAM', colName, HEADER_H + 22);
+  roundNames.forEach((rn, i) => {
+    ctx.textAlign = 'center';
+    ctx.fillText(rn.toUpperCase(), colRounds + i * roundColW + roundColW / 2, HEADER_H + 22);
+  });
+  ctx.textAlign = 'center';
+  ctx.fillText('GRAND TOTAL', colTotal, HEADER_H + 22);
+
+  sorted.forEach(({ team, roundTotals, grandTotal }, i) => {
+    const rank = i + 1;
+    const y = HEADER_H + TABLE_HEAD_H + i * ROW_H;
+    const rankColor = RANK_COLORS[rank] ?? PDF_COLORS.subText;
+    const midY = y + ROW_H / 2 + 5;
+
+    ctx.fillStyle = i % 2 === 0 ? PDF_COLORS.rowEven : PDF_COLORS.rowOdd;
+    ctx.fillRect(0, y, W, ROW_H);
+    if (rank <= 3) { ctx.fillStyle = rankColor; ctx.fillRect(0, y, 3, ROW_H); }
+
+    ctx.fillStyle = rankColor; ctx.font = 'bold 13px Georgia, serif'; ctx.textAlign = 'left';
+    ctx.fillText(rankLabel(rank), colRank, midY);
+
+    ctx.fillStyle = rank <= 3 ? rankColor : PDF_COLORS.text; ctx.font = 'bold 13px Georgia, serif';
+    ctx.fillText(truncate(team.name, 18), colName, midY);
+
+    roundTotals.forEach((rt, ri) => {
+      ctx.fillStyle = '#a78bfa'; ctx.font = '13px monospace'; ctx.textAlign = 'center';
+      ctx.fillText(rt.total.toLocaleString(), colRounds + ri * roundColW + roundColW / 2, midY);
+    });
+
+    ctx.fillStyle = PDF_COLORS.scoreGreen; ctx.font = 'bold 15px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(grandTotal.toLocaleString(), colTotal, midY);
+
+    ctx.strokeStyle = PDF_COLORS.border; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(0, y + ROW_H); ctx.lineTo(W, y + ROW_H); ctx.stroke();
+  });
+
+  drawFooter(ctx, W, HEADER_H + TABLE_HEAD_H + sorted.length * ROW_H, `${eventName} · Overview · All Rounds · ${new Date().toLocaleDateString()}`);
+
+  const pdfBytes = await buildPDFFromCanvas(canvas);
+  triggerDownload(new Blob([pdfBytes], { type: 'application/pdf' }), `${slugify(eventName)}_overview_all_rounds.pdf`);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GAME — specific game, all rounds
+// ══════════════════════════════════════════════════════════════════════════════
+
+export type GameAllRoundsEntry = {
+  team: Team;
+  roundScores: { roundName: string; score: number }[];
+  total: number;
+};
+
+export function exportGameXML(entries: GameAllRoundsEntry[], game: Game, eventName = 'FASTATHON'): void {
+  const sorted = [...entries].sort((a, b) => b.total - a.total);
+
+  const teamNodes = sorted.map((e, i) => {
+    const roundNodes = e.roundScores
+      .map(r => `      <round name="${escapeXML(r.roundName)}" score="${r.score}" />`)
+      .join('\n');
+    return `  <team rank="${i + 1}" id="${escapeXML(e.team.id)}">
+    <n>${escapeXML(e.team.name)}</n>
+    <totalScore>${e.total}</totalScore>
+    <rounds>\n${roundNodes}\n    </rounds>
+  </team>`;
+  }).join('\n');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<leaderboard event="${escapeXML(eventName)}" game="${escapeXML(game.name)}" type="game" exportedAt="${new Date().toISOString()}" totalTeams="${entries.length}">
+${teamNodes}
+</leaderboard>`;
+
+  triggerDownload(new Blob([xml], { type: 'application/xml;charset=utf-8' }), `${slugify(eventName)}_${slugify(game.name)}_all_rounds.xml`);
+}
+
+export async function exportGamePDF(entries: GameAllRoundsEntry[], game: Game, eventName = 'FASTATHON'): Promise<void> {
+  const sorted = [...entries].sort((a, b) => b.total - a.total);
+  const roundNames = entries[0]?.roundScores.map(r => r.roundName) ?? [];
+
+  const W = 800, ROW_H = 50, HEADER_H = 90, TABLE_HEAD_H = 36, FOOTER_H = 40;
+  const H = HEADER_H + TABLE_HEAD_H + sorted.length * ROW_H + FOOTER_H;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.fillStyle = PDF_COLORS.bg; ctx.fillRect(0, 0, W, H);
+  drawHeader(ctx, W, `${eventName} · ${game.name}`, 'INDIVIDUAL EVENT RANKINGS — ALL ROUNDS', game.color, sorted.length);
+
+  ctx.fillStyle = '#111827'; ctx.fillRect(0, HEADER_H, W, TABLE_HEAD_H);
+  ctx.fillStyle = PDF_COLORS.subText; ctx.font = 'bold 11px monospace';
+
+  const colRank = 30, colName = 90, colRounds = 270, colTotal = 720;
+  const roundColW = (colTotal - colRounds - 40) / roundNames.length;
+
+  ctx.textAlign = 'left';
+  ctx.fillText('RANK', colRank, HEADER_H + 22);
+  ctx.fillText('TEAM', colName, HEADER_H + 22);
+  roundNames.forEach((rn, i) => {
+    ctx.textAlign = 'center';
+    ctx.fillText(rn.toUpperCase(), colRounds + i * roundColW + roundColW / 2, HEADER_H + 22);
+  });
+  ctx.textAlign = 'center';
+  ctx.fillText('TOTAL', colTotal, HEADER_H + 22);
+
+  sorted.forEach(({ team, roundScores, total }, i) => {
+    const rank = i + 1;
+    const y = HEADER_H + TABLE_HEAD_H + i * ROW_H;
+    const rankColor = RANK_COLORS[rank] ?? PDF_COLORS.subText;
+    const midY = y + ROW_H / 2 + 5;
+
+    ctx.fillStyle = i % 2 === 0 ? PDF_COLORS.rowEven : PDF_COLORS.rowOdd;
+    ctx.fillRect(0, y, W, ROW_H);
+    if (rank <= 3) { ctx.fillStyle = rankColor; ctx.fillRect(0, y, 3, ROW_H); }
+
+    ctx.fillStyle = rankColor; ctx.font = 'bold 13px Georgia, serif'; ctx.textAlign = 'left';
+    ctx.fillText(rankLabel(rank), colRank, midY);
+
+    ctx.fillStyle = rank <= 3 ? rankColor : PDF_COLORS.text; ctx.font = 'bold 13px Georgia, serif';
+    ctx.fillText(truncate(team.name, 18), colName, midY);
+
+    roundScores.forEach((rs, ri) => {
+      ctx.fillStyle = game.color; ctx.font = '13px monospace'; ctx.textAlign = 'center';
+      ctx.fillText(rs.score.toLocaleString(), colRounds + ri * roundColW + roundColW / 2, midY);
+    });
+
+    ctx.fillStyle = PDF_COLORS.scoreGreen; ctx.font = 'bold 15px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(total.toLocaleString(), colTotal, midY);
+
+    ctx.strokeStyle = PDF_COLORS.border; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(0, y + ROW_H); ctx.lineTo(W, y + ROW_H); ctx.stroke();
+  });
+
+  drawFooter(ctx, W, HEADER_H + TABLE_HEAD_H + sorted.length * ROW_H, `${eventName} · ${game.name} · All Rounds · ${new Date().toLocaleDateString()}`);
+
+  const pdfBytes = await buildPDFFromCanvas(canvas);
+  triggerDownload(new Blob([pdfBytes], { type: 'application/pdf' }), `${slugify(eventName)}_${slugify(game.name)}_all_rounds.pdf`);
 }
