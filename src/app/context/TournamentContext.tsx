@@ -4,6 +4,10 @@ export type Team = {
   id: string;
   name: string;
   icon: string;
+  basePoints?: number;
+  colorHint?: string;
+  logo?: string;
+  statusLabel?: string;
 };
 
 export type Game = {
@@ -41,13 +45,16 @@ interface TournamentContextType {
 }
 
 const defaultTeams: Team[] = [
-  { id: 't1', name: 'Team Alpha', icon: 'zap' },
-  { id: 't2', name: 'Team Nova', icon: 'star' },
-  { id: 't3', name: 'Team Titan', icon: 'shield' },
-  { id: 't4', name: 'Team Velocity', icon: 'wind' },
-  { id: 't5', name: 'Team Echo', icon: 'radio' },
-  { id: 't6', name: 'Team Phantom', icon: 'eye-off' },
-  { id: 't7', name: 'Team Omega', icon: 'infinity' },
+  { id: 't1', name: 'Team Nova', icon: 'star', basePoints: 120, colorHint: '#7cc7ff' },
+  { id: 't2', name: 'Team Helios', icon: 'sun', basePoints: 510, colorHint: '#ffbb6e' },
+  { id: 't3', name: 'Team Atlas', icon: 'mountain', basePoints: 280, colorHint: '#8ee2b6' },
+  { id: 't4', name: 'Team Eclipse', icon: 'moon', basePoints: 330, colorHint: '#b7a5ff' },
+  { id: 't5', name: 'Team Quasar', icon: 'orbit', basePoints: 610, colorHint: '#81a8ff' },
+  { id: 't6', name: 'Team Titan', icon: 'shield', basePoints: 210, colorHint: '#d6c08b' },
+  { id: 't7', name: 'Team Obsidian', icon: 'hexagon', basePoints: 150, colorHint: '#9f8de2' },
+  { id: 't8', name: 'Team Aurora', icon: 'sparkles', basePoints: 540, colorHint: '#6ee8d5' },
+  { id: 't9', name: 'Team Zenith', icon: 'rocket', basePoints: 260, colorHint: '#ffc682' },
+  { id: 't10', name: 'Team Vortex', icon: 'wind', basePoints: 185, colorHint: '#94b2ff' },
 ];
 
 const defaultGames: Game[] = [
@@ -85,7 +92,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
   const [games] = useState<Game[]>(defaultGames);
   const [rounds] = useState<Round[]>(defaultRounds);
   const [scores, setScores] = useState<Scores>(generateInitialScores());
-  
+
   // Default to all default teams being in all rounds
   const [roundTeams, setRoundTeams] = useState<Record<string, string[]>>(() => {
     const initial: Record<string, string[]> = {};
@@ -138,7 +145,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
   const addTeamToRound = (roundId: string, teamData: Omit<Team, 'id'>) => {
     const newTeamId = `t${Date.now()}`;
     const newTeam = { id: newTeamId, ...teamData };
-    
+
     setTeams(prev => [...prev, newTeam]);
     setRoundTeams(prev => ({
       ...prev,

@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { motion } from 'motion/react';
-import { Trophy, Gamepad2, Settings } from 'lucide-react';
+import { Trophy, Gamepad2, Settings, Orbit } from 'lucide-react';
 import { useTournament } from '../context/TournamentContext';
 
 const Particles = () => {
@@ -38,9 +38,11 @@ const Particles = () => {
 export function Layout() {
   const { games } = useTournament();
   const location = useLocation();
+  const isGalaxyRoute = location.pathname === '/' || location.pathname.startsWith('/galaxy');
 
   const links = [
-    { to: '/', label: 'Overview', icon: Trophy },
+    { to: '/galaxy', label: 'Galaxy', icon: Orbit },
+    { to: '/overview', label: 'Overview', icon: Trophy },
     ...games.map(g => ({
       to: `/game/${g.id}`,
       label: g.name,
@@ -93,7 +95,7 @@ export function Layout() {
 
       <header className="relative z-10 border-b border-[#333333]/50 bg-[#0A0A0A]/80 backdrop-blur-xl sticky top-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-20 items-center justify-between">
+          <div className="flex h-20 items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="relative flex h-12 w-12 items-center justify-center rounded-xl overflow-hidden p-[1px] bg-gradient-to-br from-[#76B900] to-[#558a00] shadow-[0_0_15px_rgba(118,185,0,0.3)]">
                 <div className="absolute inset-0 bg-[#000000]" />
@@ -104,14 +106,17 @@ export function Layout() {
               </h1>
             </div>
 
-            <nav className="hidden md:flex space-x-1">
+            <nav className="hidden min-w-0 flex-1 items-center justify-end md:flex">
+              <div className="flex max-w-full items-center gap-1 overflow-x-auto scrollbar-hide">
               {links.map((link) => {
-                const isActive = location.pathname === link.to;
+                const isActive = link.to === '/galaxy'
+                  ? isGalaxyRoute
+                  : location.pathname === link.to;
                 return (
                   <NavLink
                     key={link.to}
                     to={link.to}
-                    className={`relative px-4 py-2 text-sm font-bold uppercase tracking-wider rounded-lg transition-colors duration-200 ${
+                    className={`relative shrink-0 px-3 py-2 text-sm font-bold uppercase tracking-wider rounded-lg transition-colors duration-200 ${
                       isActive ? 'text-[#76B900]' : 'text-[#A1A1AA] hover:text-white hover:bg-[#222222]/50'
                     }`}
                   >
@@ -130,6 +135,7 @@ export function Layout() {
                   </NavLink>
                 );
               })}
+              </div>
             </nav>
           </div>
         </div>
@@ -137,7 +143,7 @@ export function Layout() {
         <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#76B900] to-transparent opacity-60 shadow-[0_0_12px_#76B900]" />
       </header>
 
-      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className={`relative z-10 py-8 ${isGalaxyRoute ? 'px-2 sm:px-3 lg:px-4' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}`}>
         <Outlet />
       </main>
     </div>

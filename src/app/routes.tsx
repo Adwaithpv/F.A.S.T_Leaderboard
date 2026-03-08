@@ -4,6 +4,7 @@ import { Overview } from "./pages/Overview";
 import { GameLeaderboard } from "./pages/GameLeaderboard";
 import { AdminPanel } from "./pages/AdminPanel";
 import { TournamentProvider } from "./context/TournamentContext";
+import { GalaxyLeaderboardPage } from "./pages/GalaxyLeaderboardPage";
 
 export const router = createBrowserRouter([
   {
@@ -14,7 +15,9 @@ export const router = createBrowserRouter([
       </TournamentProvider>
     ),
     children: [
-      { index: true, Component: Overview },
+      { index: true, Component: GalaxyLeaderboardPage },
+      { path: "galaxy", Component: GalaxyLeaderboardPage },
+      { path: "overview", Component: Overview },
       { path: "game/:gameId", Component: GameLeaderboard },
       { path: "admin", Component: AdminPanel },
     ],

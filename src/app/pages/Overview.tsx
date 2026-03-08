@@ -35,8 +35,8 @@ export function Overview() {
               onClick={() => setSelectedRound(round.id)}
               className={cn(
                 "relative px-6 py-2.5 text-sm font-bold uppercase tracking-widest rounded-lg transition-all duration-300",
-                selectedRound === round.id 
-                  ? "text-[#76B900] drop-shadow-[0_0_8px_rgba(118,185,0,0.8)]" 
+                selectedRound === round.id
+                  ? "text-[#76B900] drop-shadow-[0_0_8px_rgba(118,185,0,0.8)]"
                   : "text-[#A1A1AA] hover:text-white"
               )}
             >
