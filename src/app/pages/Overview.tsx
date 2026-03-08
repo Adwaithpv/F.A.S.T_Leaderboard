@@ -43,7 +43,7 @@ export function Overview() {
           <ExportButtons
             entries={exportEntries}
             roundName={selectedRoundName}
-            eventName="HackClub Hackathon"
+            eventName="FASTATHON HACKATHON"
           />
 
           {/* Round Selector */}
