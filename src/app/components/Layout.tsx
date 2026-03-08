@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
-import { motion } from 'motion/react';
-import { Trophy, Gamepad2, Settings, Orbit } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Trophy, Gamepad2, Settings, Orbit, Menu, X } from 'lucide-react';
 import { useTournament } from '../context/TournamentContext';
 
 const Particles = () => {
@@ -39,6 +39,7 @@ export function Layout() {
   const { games } = useTournament();
   const location = useLocation();
   const isGalaxyRoute = location.pathname === '/' || location.pathname.startsWith('/galaxy');
+  const [isNavOpen, setIsNavOpen] = useState(false);
 
   const links = [
     { to: '/galaxy', label: 'Galaxy', icon: Orbit },
@@ -93,57 +94,76 @@ export function Layout() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#000000_100%)] opacity-80" />
       </div>
 
-      <header className="relative z-10 border-b border-[#333333]/50 bg-[#0A0A0A]/80 backdrop-blur-xl sticky top-0">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-20 items-center justify-between gap-4">
+      <header className={`fixed z-50 top-0 left-0 w-full transition-all duration-300 ${isGalaxyRoute && !isNavOpen ? 'bg-transparent border-transparent' : 'border-b border-[#333333]/50 bg-[#0A0A0A]/80 backdrop-blur-xl'}`}>
+        <div className="w-full p-4 md:p-6">
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="relative flex h-12 w-12 items-center justify-center rounded-xl overflow-hidden p-[1px] bg-gradient-to-br from-[#76B900] to-[#558a00] shadow-[0_0_15px_rgba(118,185,0,0.3)]">
+              <button
+                onClick={() => setIsNavOpen(!isNavOpen)}
+                className="p-2 -ml-2 text-[#A1A1AA] hover:text-white transition-colors rounded-lg hover:bg-[#222222]/50 focus:outline-none focus:ring-2 focus:ring-[#76B900]/50 relative z-50"
+                aria-label="Toggle navigation"
+              >
+                {isNavOpen ? <X size={28} /> : <Menu size={28} />}
+              </button>
+              
+              <div className="relative flex h-12 w-12 items-center justify-center rounded-xl overflow-hidden p-[1px] bg-gradient-to-br from-[#76B900] to-[#558a00] shadow-[0_0_15px_rgba(118,185,0,0.3)] ml-2">
                 <div className="absolute inset-0 bg-[#000000]" />
                 <img src="/logo.png" alt="Fastathon Logo" className="relative z-10 w-full h-full object-contain p-1" />
               </div>
-              <h1 className="text-2xl font-bold font-display tracking-widest text-[#FFFFFF] drop-shadow-[0_0_8px_rgba(118,185,0,0.5)]">
+              <h1 className="text-xl sm:text-2xl font-bold font-display tracking-widest text-[#FFFFFF] drop-shadow-[0_0_8px_rgba(118,185,0,0.5)]">
                 FASTATHON LEADERBOARD
               </h1>
             </div>
 
-            <nav className="hidden min-w-0 flex-1 items-center justify-end md:flex">
-              <div className="flex max-w-full items-center gap-1 overflow-x-auto scrollbar-hide">
-              {links.map((link) => {
-                const isActive = link.to === '/galaxy'
-                  ? isGalaxyRoute
-                  : location.pathname === link.to;
-                return (
-                  <NavLink
-                    key={link.to}
-                    to={link.to}
-                    className={`relative shrink-0 px-3 py-2 text-sm font-bold uppercase tracking-wider rounded-lg transition-colors duration-200 ${
-                      isActive ? 'text-[#76B900]' : 'text-[#A1A1AA] hover:text-white hover:bg-[#222222]/50'
-                    }`}
-                  >
-                    {isActive && (
-                      <motion.div
-                        layoutId="activeTab"
-                        className="absolute inset-0 border-b-2 border-[#76B900] bg-gradient-to-t from-[#76B900]/10 to-transparent rounded-lg"
-                        initial={false}
-                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                      />
-                    )}
-                    <span className="relative z-10 flex items-center gap-2">
-                      <link.icon size={16} />
-                      {link.label}
-                    </span>
-                  </NavLink>
-                );
-              })}
-              </div>
-            </nav>
           </div>
         </div>
+
+        {/* Collapsible Animated Navigation Dropdown */}
+        <AnimatePresence>
+          {isNavOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className="overflow-hidden bg-[#0A0A0A]/95 backdrop-blur-xl border-b border-[#333333]/50 absolute top-full left-0 w-full"
+            >
+              <nav className="py-4 flex flex-col gap-2 px-4 md:px-6">
+                {links.map((link, idx) => {
+                  const isActive = link.to === '/galaxy' ? isGalaxyRoute : location.pathname === link.to;
+                  return (
+                    <motion.div
+                      key={link.to}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.2, delay: idx * 0.05 }}
+                    >
+                      <NavLink
+                        to={link.to}
+                        onClick={() => setIsNavOpen(false)}
+                        className={`flex items-center gap-4 px-4 py-3 text-sm font-bold uppercase tracking-wider rounded-lg transition-colors duration-200 ${
+                          isActive 
+                            ? 'bg-[#76B900]/10 text-[#76B900] border border-[#76B900]/30 shadow-[0_0_15px_rgba(118,185,0,0.15)]' 
+                            : 'text-[#A1A1AA] hover:text-white hover:bg-[#222222]/50 border border-transparent'
+                        }`}
+                      >
+                        <link.icon size={20} className={isActive ? 'text-[#76B900]' : 'text-[#888888]'} />
+                        {link.label}
+                      </NavLink>
+                    </motion.div>
+                  );
+                })}
+              </nav>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Bottom Neon Line */}
-        <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#76B900] to-transparent opacity-60 shadow-[0_0_12px_#76B900]" />
+        <div className={`h-[2px] w-full bg-gradient-to-r from-transparent via-[#76B900] to-transparent opacity-60 shadow-[0_0_12px_#76B900] relative z-20 ${isGalaxyRoute && !isNavOpen ? 'hidden' : ''}`} />
       </header>
 
-      <main className={`relative z-10 py-8 ${isGalaxyRoute ? 'px-2 sm:px-3 lg:px-4' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}`}>
+      <main className={`relative z-10 ${isGalaxyRoute ? 'h-screen w-screen p-0 m-0 overflow-hidden' : 'py-8 pt-28 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}`}>
         <Outlet />
       </main>
     </div>

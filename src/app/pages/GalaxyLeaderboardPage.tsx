@@ -171,11 +171,11 @@ export function GalaxyLeaderboardPage() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -18 }}
-      transition={{ duration: 0.45 }}
-      className="relative min-h-[calc(100vh-11rem)] overflow-hidden rounded-2xl border border-white/10 bg-[#05070d]"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.8 }}
+      className="absolute inset-0 overflow-hidden bg-[#05070d]"
     >
       <div className="absolute inset-0">
         <GalaxyCanvas
@@ -193,8 +193,8 @@ export function GalaxyLeaderboardPage() {
 
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(124,158,255,0.16),transparent_42%),radial-gradient(circle_at_80%_100%,rgba(255,178,110,0.12),transparent_38%)]" />
 
-      <div className="relative z-10 flex h-full min-h-[calc(100vh-11rem)] flex-col justify-between p-4 md:p-6">
-        <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 py-2 backdrop-blur-xl">
+      <div className="relative z-10 flex h-full w-full flex-col justify-between p-4 pt-[100px] md:p-6 md:pt-[100px] pointer-events-none pb-8 md:pb-8">
+        <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 py-2 backdrop-blur-xl max-w-fit">
           <h2 className="mr-auto text-sm font-display uppercase tracking-widest text-white/80">Galaxy Power Map</h2>
           {rounds.map((round) => (
             <button
