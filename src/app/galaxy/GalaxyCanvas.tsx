@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Canvas, ThreeEvent, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera, Stars } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
+import { OrbitControls, PerspectiveCamera, Stars, Billboard, Text } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette, DepthOfField, ChromaticAberration, Noise } from '@react-three/postprocessing';
 import { a, useSpring } from '@react-spring/three';
 import * as THREE from 'three';
 import { GalaxyTeam, PlanetDNA } from './galaxyTypes';
+import { generatePlanetTexture, getGlowSprite } from './textureGenerator';
 
 type QualityMode = 'cinematic' | 'performance';
 
@@ -79,7 +80,17 @@ const StarfieldDust = ({ qualityMode }: { qualityMode: QualityMode }) => {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" array={positions} itemSize={3} count={count} />
       </bufferGeometry>
-      <pointsMaterial ref={matRef} color="#8db0ff" size={0.9} sizeAttenuation transparent opacity={0.26} />
+      <pointsMaterial 
+        ref={matRef} 
+        color="#8db0ff" 
+        size={2.2} 
+        sizeAttenuation 
+        map={getGlowSprite()}
+        transparent 
+        opacity={0.26} 
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+      />
     </points>
   );
 };
@@ -250,6 +261,20 @@ const CentralStar = ({
 
       {/* Gravitational shimmer particles around the leader */}
       <GravitationalShimmer radius={starRadius * 2.5} intensity={0.6 + leaderTransitionValue * 0.4} />
+
+      {/* Leader Label */}
+      <Billboard position={[0, starRadius * 2.0, 0]}>
+        <Text
+          fontSize={1.4}
+          color="#ffffff"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.06}
+          outlineColor="#000000"
+        >
+          {leader.name.toUpperCase()}
+        </Text>
+      </Billboard>
     </group>
   );
 };
@@ -288,7 +313,17 @@ const GravitationalShimmer = ({ radius, intensity }: { radius: number; intensity
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" array={positions} itemSize={3} count={count} />
       </bufferGeometry>
-      <pointsMaterial ref={matRef} color="#ffd699" size={0.35} sizeAttenuation transparent opacity={0.2} depthWrite={false} />
+      <pointsMaterial 
+        ref={matRef} 
+        color="#ffd699" 
+        size={0.8} 
+        sizeAttenuation 
+        map={getGlowSprite()}
+        transparent 
+        opacity={0.2} 
+        depthWrite={false} 
+        blending={THREE.AdditiveBlending}
+      />
     </points>
   );
 };
@@ -297,7 +332,15 @@ const Ring = ({ radius, color, tilt }: { radius: number; color: string; tilt?: n
   return (
     <mesh rotation={[Math.PI / 2.2 + (tilt ?? 0), 0, 0]}>
       <ringGeometry args={[radius * 1.32, radius * 1.88, 96]} />
-      <meshStandardMaterial color={color} transparent opacity={0.36} roughness={0.9} metalness={0.08} side={THREE.DoubleSide} />
+      <meshStandardMaterial 
+        color={color} 
+        transparent 
+        opacity={0.45} 
+        roughness={0.7} 
+        metalness={0.1} 
+        side={THREE.DoubleSide} 
+        map={getGlowSprite()} // Gives the rings a softer, dusty look
+      />
     </mesh>
   );
 };
@@ -375,6 +418,8 @@ const PlanetNode = ({
   // Cloud opacity intensifies with influence
   const cloudOpacity = 0.10 + dna.cloudStrength * 0.22 + team.normalizedInfluence * 0.08;
 
+  const surfaceTexture = useMemo(() => generatePlanetTexture(dna), [dna]);
+
   return (
     <a.group
       ref={groupRef}
@@ -388,6 +433,8 @@ const PlanetNode = ({
         <sphereGeometry args={[1, qualityMode === 'cinematic' ? 52 : 34, qualityMode === 'cinematic' ? 52 : 34]} />
         <meshStandardMaterial
           color={baseColor}
+          map={surfaceTexture}
+          roughnessMap={surfaceTexture} // Reuse as roughness map
           roughness={Math.max(0.12, dna.roughnessBase - team.normalizedInfluence * 0.18)}
           metalness={0.12 + rivalLightingBoost * 0.18}
           emissive={emissiveColor}
@@ -437,6 +484,22 @@ const PlanetNode = ({
 
       {/* Score-change energy ripple: visible when pulseValue > 0 */}
       {pulseValue > 0.05 ? <ScoreRipple intensity={pulseValue} color={dna.palette.emissive} /> : null}
+
+      {/* Planet Label */}
+      <Billboard position={[0, 1.5 + team.normalizedInfluence * 0.5, 0]}>
+        <Text
+          fontSize={hovered ? 0.8 : 0.6}
+          color="#ffffff"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.04}
+          outlineColor="#000000"
+          fillOpacity={hovered || isSelected ? 1 : 0.7}
+          outlineOpacity={hovered || isSelected ? 1 : 0.7}
+        >
+          {team.name.toUpperCase()}
+        </Text>
+      </Billboard>
     </a.group>
   );
 };
@@ -453,7 +516,7 @@ const ScoreRipple = ({ intensity, color }: { intensity: number; color: string })
     const expandProgress = Math.min(1, elapsed * 0.8);
     const scale = 1.5 + expandProgress * 3.0 * intensity;
     ringRef.current.scale.setScalar(scale);
-    ringRef.current.material.opacity = Math.max(0, 0.25 * intensity * (1 - expandProgress));
+    (ringRef.current.material as THREE.Material).opacity = Math.max(0, 0.25 * intensity * (1 - expandProgress));
   });
 
   return (
@@ -495,11 +558,13 @@ const CameraRig = ({
   teams,
   onResetViewKey,
   leaderTransitionValue = 0,
+  focusTarget,
 }: {
   selectedTeamId: string | null;
   teams: GalaxyTeam[];
   onResetViewKey?: number;
   leaderTransitionValue?: number;
+  focusTarget: THREE.Vector3;
 }) => {
   const controlsRef = useRef<any>(null);
   const targetRef = useRef(new THREE.Vector3(0, 0, 0));
@@ -535,10 +600,18 @@ const CameraRig = ({
       if (selected) {
         const dynamicFocus = getOrbitalPosition(selected, t);
         targetRef.current.lerp(dynamicFocus, 0.12);
-        const pullback = selected.rank === 1 ? 15 : 0;
+        
+        // Base pullback plus extra distance based on how large the planet is (normalizedInfluence)
+        // Leader (rank 1) gets a much larger pullback because the central star is huge
+        const sizePullback = selected.normalizedInfluence * 12;
+        const rankPullback = selected.rank === 1 ? 22 : 4;
+        const totalPullback = rankPullback + sizePullback;
+
         _tmpVec.copy(dynamicFocus).add(focusOffset);
-        _tmpVec.y += pullback * 0.35;
-        _tmpVec.z += pullback;
+        // Adjust the Y and Z offsets proportionally to the pullback
+        _tmpVec.y += totalPullback * 0.4;
+        _tmpVec.z += totalPullback;
+        
         desiredCameraPosRef.current.lerp(_tmpVec, 0.11);
       }
     } else if (leaderAckRef.current) {
@@ -560,8 +633,10 @@ const CameraRig = ({
     if (controlsRef.current) {
       controlsRef.current.target.lerp(targetRef.current, 0.08);
       controlsRef.current.update();
+      focusTarget.copy(controlsRef.current.target);
     } else {
       camera.lookAt(targetRef.current);
+      focusTarget.copy(targetRef.current);
     }
   });
 
@@ -605,11 +680,11 @@ const CometStreak = ({ qualityMode }: { qualityMode: QualityMode }) => {
     <group>
       <mesh ref={cometRef}>
         <sphereGeometry args={[0.2, 12, 12]} />
-        <meshBasicMaterial color="#d9ebff" />
+        <meshBasicMaterial color="#d9ebff" transparent opacity={0.8} />
       </mesh>
       <mesh ref={trailRef}>
-        <sphereGeometry args={[1.2, 12, 12]} />
-        <meshBasicMaterial color="#8ab6ff" transparent opacity={0.14} depthWrite={false} />
+        <sphereGeometry args={[1.5, 12, 12]} />
+        <meshBasicMaterial color="#8ab6ff" transparent opacity={0.3} depthWrite={false} map={getGlowSprite()} blending={THREE.AdditiveBlending} />
       </mesh>
     </group>
   );
@@ -627,6 +702,8 @@ const GalaxyScene = ({
   pulseByTeamId = {},
 }: GalaxyCanvasProps) => {
   const leader = teams[0];
+  const focusTarget = useMemo(() => new THREE.Vector3(0, 0, 0), []);
+
   if (!leader) return null;
 
   return (
@@ -639,6 +716,7 @@ const GalaxyScene = ({
         selectedTeamId={selectedTeamId}
         onResetViewKey={onResetViewKey}
         leaderTransitionValue={leaderTransitionValue}
+        focusTarget={focusTarget}
       />
 
       <ambientLight intensity={0.24} color="#94a7c8" />
@@ -668,13 +746,22 @@ const GalaxyScene = ({
         />
       ))}
 
-      <EffectComposer disableNormalPass multisampling={qualityMode === 'cinematic' ? 4 : 0}>
+      <EffectComposer enableNormalPass={false} multisampling={qualityMode === 'cinematic' ? 4 : 0}>
+        <DepthOfField 
+          focusDistance={0.015} 
+          focalLength={0.06} 
+          bokehScale={qualityMode === 'cinematic' ? 3.5 : 2} 
+          target={focusTarget}
+        />
         <Bloom
-          intensity={qualityMode === 'cinematic' ? 1.35 : 0.8}
-          luminanceThreshold={0.12}
-          luminanceSmoothing={0.65}
+          intensity={qualityMode === 'cinematic' ? 1.5 : 0.8}
+          luminanceThreshold={0.15}
+          luminanceSmoothing={0.75}
           mipmapBlur
         />
+        {/* @ts-ignore - The react-three/postprocessing types are outdated for ChromaticAberration in this version */}
+        <ChromaticAberration offset={new THREE.Vector2(0.0006, 0.0006)} />
+        <Noise opacity={0.018} />
         <Vignette eskil={false} offset={0.18} darkness={0.7} />
       </EffectComposer>
     </>
