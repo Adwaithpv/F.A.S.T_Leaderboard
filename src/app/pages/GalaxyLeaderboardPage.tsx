@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { RotateCcw, Sparkles, Telescope } from 'lucide-react';
+import { RotateCcw, Sparkles, Telescope, Move, X, MousePointer2 } from 'lucide-react';
 import { cn } from '../components/NeonButton';
 import { useTournament } from '../context/TournamentContext';
 import { GalaxyCanvas } from '../galaxy/GalaxyCanvas';
@@ -20,6 +20,9 @@ export function GalaxyLeaderboardPage() {
   const [previousLeaderId, setPreviousLeaderId] = useState<string | null>(null);
   const [leaderTransitionValue, setLeaderTransitionValue] = useState(0);
   const [pulseByTeamId, setPulseByTeamId] = useState<Record<string, number>>({});
+  
+  // NEW: State for Free View Mode
+  const [isFreeView, setIsFreeView] = useState(false);
 
   const previousPointsByTeamRef = useRef<Record<string, number>>({});
   const basePointsByTeamRef = useRef<Record<string, number>>({});
@@ -67,7 +70,7 @@ export function GalaxyLeaderboardPage() {
     }
   }, [galaxyTeams, selectedTeamId]);
 
-  // Rule 5: Score change feedback — pulse intensity proportional to delta, then decay
+  // Score change feedback
   const pulseDecayRafRef = useRef<number | null>(null);
   useEffect(() => {
     const pulseMap: Record<string, number> = {};
@@ -160,7 +163,6 @@ export function GalaxyLeaderboardPage() {
   }, [galaxyTeams]);
 
   const selectedTeam = galaxyTeams.find((team) => team.id === selectedTeamId) ?? galaxyTeams[0];
-
   const topStrip = galaxyTeams;
 
   useEffect(() => {
@@ -168,6 +170,12 @@ export function GalaxyLeaderboardPage() {
       setQualityMode('performance');
     }
   }, [isMobile]);
+
+  // NEW: Helper function to handle team selection and exit free view
+  const handleSelectTeam = (id: string) => {
+    setSelectedTeamId(id);
+    setIsFreeView(false);
+  };
 
   return (
     <motion.div
@@ -182,20 +190,52 @@ export function GalaxyLeaderboardPage() {
           teams={galaxyTeams}
           dnaByTeam={dnaByTeamRef.current}
           selectedTeamId={selectedTeamId}
-          onSelectTeam={setSelectedTeamId}
+          onSelectTeam={handleSelectTeam}
           qualityMode={qualityMode}
           onResetViewKey={resetViewKey}
           previousLeaderId={previousLeaderId}
           leaderTransitionValue={leaderTransitionValue}
           pulseByTeamId={pulseByTeamId}
+          isFreeView={isFreeView} // Passed down to canvas
         />
       </div>
 
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(124,158,255,0.16),transparent_42%),radial-gradient(circle_at_80%_100%,rgba(255,178,110,0.12),transparent_38%)]" />
 
-      <div className="relative z-10 flex h-full w-full flex-col justify-between p-4 pt-[100px] md:p-6 md:pt-[100px] pointer-events-none pb-8 md:pb-8">
+      {/* --- FREE VIEW CONTROLS OVERLAY --- */}
+      <div
+        className={cn(
+          "absolute bottom-8 left-1/2 z-50 -translate-x-1/2 transition-all duration-500",
+          isFreeView ? "translate-y-0 opacity-100 pointer-events-auto" : "translate-y-10 opacity-0 pointer-events-none"
+        )}
+      >
+        <div className="flex items-center gap-4 rounded-full border border-white/10 bg-black/60 px-6 py-3 shadow-2xl backdrop-blur-xl">
+          <MousePointer2 size={16} className="text-slate-400" />
+          <span className="hidden text-xs font-medium tracking-wide text-slate-300 sm:block">
+            Left Click: Rotate <span className="mx-2 text-slate-600">|</span> Right Click: Pan <span className="mx-2 text-slate-600">|</span> Scroll: Zoom
+          </span>
+          <div className="mx-2 hidden h-5 w-px bg-white/20 sm:block"></div>
+          <button
+            onClick={() => setIsFreeView(false)}
+            className="flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/20 px-3 py-1.5 text-xs font-bold text-rose-300 transition-all hover:bg-rose-500/40"
+          >
+            <X size={14} />
+            Exit Mode
+          </button>
+        </div>
+      </div>
+
+      {/* --- STANDARD UI OVERLAY --- */}
+      {/* Added dynamic classes to fade this out when Free View is active */}
+      <div 
+        className={cn(
+          "relative z-10 flex h-full w-full flex-col justify-between p-4 pt-[100px] md:p-6 md:pt-[100px] pointer-events-none pb-8 md:pb-8 transition-opacity duration-500",
+          isFreeView ? "opacity-0" : "opacity-100"
+        )}
+      >
         <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 py-2 backdrop-blur-xl max-w-fit">
-          <h2 className="mr-auto text-sm font-display uppercase tracking-widest text-white/80">Galaxy Power Map</h2>
+          <h2 className="mr-2 text-sm font-display uppercase tracking-widest text-white/80">Galaxy Power Map</h2>
+          
           {rounds.map((round) => (
             <button
               key={round.id}
@@ -210,6 +250,17 @@ export function GalaxyLeaderboardPage() {
               {round.name}
             </button>
           ))}
+
+          <div className="ml-2 h-4 w-px bg-white/20"></div>
+
+          {/* Enable Free View Button */}
+          <button
+            onClick={() => setIsFreeView(true)}
+            className="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-300 transition hover:bg-white/15 hover:text-white"
+          >
+            <Move size={12} />
+            Free View
+          </button>
         </div>
 
         <div className="pointer-events-auto space-y-2">
@@ -247,7 +298,7 @@ export function GalaxyLeaderboardPage() {
             {topStrip.map((team) => (
               <button
                 key={team.id}
-                onClick={() => setSelectedTeamId(team.id)}
+                onClick={() => handleSelectTeam(team.id)}
                 className={cn(
                   'rounded-lg border px-2.5 py-1 text-xs transition',
                   selectedTeamId === team.id

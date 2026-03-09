@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Canvas, ThreeEvent, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera, Stars, Billboard, Text } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette, DepthOfField, ChromaticAberration, Noise } from '@react-three/postprocessing';
+import { OrbitControls, PerspectiveCamera, Stars, Billboard, Text, Environment } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette, DepthOfField, ChromaticAberration, Noise, SSAO } from '@react-three/postprocessing';
 import { a, useSpring } from '@react-spring/three';
 import * as THREE from 'three';
 import { GalaxyTeam, PlanetDNA } from './galaxyTypes';
@@ -19,6 +19,7 @@ type GalaxyCanvasProps = {
   previousLeaderId?: string | null;
   leaderTransitionValue?: number;
   pulseByTeamId?: Record<string, number>;
+  isFreeView?: boolean;
 };
 
 type PlanetNodeProps = {
@@ -37,7 +38,6 @@ const hexToColor = (value: string) => new THREE.Color(value);
 const focusOffset = new THREE.Vector3(8, 4.5, 8);
 const _tmpVec = new THREE.Vector3();
 
-// Shared orbital position function used by both planets and camera
 const getOrbitalPosition = (team: GalaxyTeam, elapsedTime: number) => {
   if (team.rank === 1 || team.orbitRadius <= 0.0001) {
     return new THREE.Vector3(0, 0, 0);
@@ -51,27 +51,41 @@ const getOrbitalPosition = (team: GalaxyTeam, elapsedTime: number) => {
   return new THREE.Vector3(x, y, z);
 };
 
+// --- ENHANCED: Colorful Space Dust ---
 const StarfieldDust = ({ qualityMode }: { qualityMode: QualityMode }) => {
-  const count = qualityMode === 'cinematic' ? 2600 : 1200;
+  const count = qualityMode === 'cinematic' ? 4000 : 1500;
   const matRef = useRef<THREE.PointsMaterial>(null);
 
-  const positions = useMemo(() => {
-    const data = new Float32Array(count * 3);
+  const { positions, colors } = useMemo(() => {
+    const pos = new Float32Array(count * 3);
+    const col = new Float32Array(count * 3);
+    const colorChoices = [
+      new THREE.Color('#8db0ff'), // Blue
+      new THREE.Color('#ff8ded'), // Pink
+      new THREE.Color('#ffffff'), // White
+      new THREE.Color('#a38dff')  // Purple
+    ];
+
     for (let i = 0; i < count; i += 1) {
-      const radius = 120 + Math.random() * 350;
+      const radius = 60 + Math.random() * 400;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
-      data[i * 3 + 0] = radius * Math.sin(phi) * Math.cos(theta);
-      data[i * 3 + 1] = radius * Math.cos(phi) * 0.55;
-      data[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+      pos[i * 3 + 0] = radius * Math.sin(phi) * Math.cos(theta);
+      pos[i * 3 + 1] = radius * Math.cos(phi) * 0.6;
+      pos[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+
+      const c = colorChoices[Math.floor(Math.random() * colorChoices.length)];
+      col[i * 3 + 0] = c.r;
+      col[i * 3 + 1] = c.g;
+      col[i * 3 + 2] = c.b;
     }
-    return data;
+    return { positions: pos, colors: col };
   }, [count]);
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
     if (matRef.current) {
-      matRef.current.opacity = 0.25 + Math.sin(t * 0.35) * 0.05;
+      matRef.current.opacity = 0.3 + Math.sin(t * 0.5) * 0.1;
     }
   });
 
@@ -79,33 +93,35 @@ const StarfieldDust = ({ qualityMode }: { qualityMode: QualityMode }) => {
     <points frustumCulled={false}>
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" array={positions} itemSize={3} count={count} />
+        <bufferAttribute attach="attributes-color" array={colors} itemSize={3} count={count} />
       </bufferGeometry>
       <pointsMaterial 
         ref={matRef} 
-        color="#8db0ff" 
-        size={2.2} 
+        size={2.5} 
         sizeAttenuation 
         map={getGlowSprite()}
         transparent 
-        opacity={0.26} 
+        opacity={0.3} 
         depthWrite={false}
+        vertexColors
         blending={THREE.AdditiveBlending}
       />
     </points>
   );
 };
 
+// --- ENHANCED: Rich, gaseous colorful nebula background ---
 const NebulaShell = ({ qualityMode }: { qualityMode: QualityMode }) => {
   const shaderRef = useRef<THREE.ShaderMaterial>(null);
   useFrame(({ clock }) => {
     if (shaderRef.current) {
-      shaderRef.current.uniforms.uTime.value = clock.getElapsedTime();
+      shaderRef.current.uniforms.uTime.value = clock.getElapsedTime() * 0.05;
     }
   });
 
   return (
     <mesh>
-      <sphereGeometry args={[280, 48, 48]} />
+      <sphereGeometry args={[450, 64, 64]} />
       <shaderMaterial
         ref={shaderRef}
         side={THREE.BackSide}
@@ -113,7 +129,7 @@ const NebulaShell = ({ qualityMode }: { qualityMode: QualityMode }) => {
         depthWrite={false}
         uniforms={{
           uTime: { value: 0 },
-          uStrength: { value: qualityMode === 'cinematic' ? 1 : 0.65 },
+          uStrength: { value: qualityMode === 'cinematic' ? 1.2 : 0.8 },
         }}
         vertexShader={`
           varying vec3 vPos;
@@ -127,19 +143,75 @@ const NebulaShell = ({ qualityMode }: { qualityMode: QualityMode }) => {
           uniform float uTime;
           uniform float uStrength;
 
-          float hash(vec3 p) {
-            p = fract(p * 0.3183099 + vec3(0.1, 0.3, 0.7));
-            p *= 17.0;
-            return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+          // Simplex noise function
+          vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+          vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+          vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+          vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+          float snoise(vec3 v) { 
+            const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+            const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+            vec3 i  = floor(v + dot(v, C.yyy) );
+            vec3 x0 = v - i + dot(i, C.xxx) ;
+            vec3 g = step(x0.yzx, x0.xyz);
+            vec3 l = 1.0 - g;
+            vec3 i1 = min( g.xyz, l.zxy );
+            vec3 i2 = max( g.xyz, l.zxy );
+            vec3 x1 = x0 - i1 + C.xxx;
+            vec3 x2 = x0 - i2 + C.yyy;
+            vec3 x3 = x0 - D.yyy;
+            i = mod289(i); 
+            vec4 p = permute( permute( permute( 
+                      i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                    + i.y + vec4(0.0, i1.y, i2.y, 1.0 )) 
+                    + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+            vec4 j = p - 49.0 * floor(p * (1.0 / 49.0));
+            vec4 x_ = floor(j * (1.0 / 7.0));
+            vec4 y_ = floor(j - 7.0 * x_ );
+            vec4 x = x_ * (1.0 / 7.0);
+            vec4 y = y_ * (1.0 / 7.0);
+            vec4 h = 1.0 - abs(x) - abs(y);
+            vec4 b0 = vec4( x.xy, y.xy );
+            vec4 b1 = vec4( x.zw, y.zw );
+            vec4 s0 = floor(b0)*2.0 + 1.0;
+            vec4 s1 = floor(b1)*2.0 + 1.0;
+            vec4 sh = -step(h, vec4(0.0));
+            vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+            vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+            vec3 p0 = vec3(a0.xy,h.x);
+            vec3 p1 = vec3(a0.zw,h.y);
+            vec3 p2 = vec3(a1.xy,h.z);
+            vec3 p3 = vec3(a1.zw,h.w);
+            vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+            p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+            vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+            m = m * m;
+            return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
           }
 
           void main() {
-            vec3 p = normalize(vPos) * 2.2;
-            float n = hash(floor(p * 40.0 + uTime * 0.07));
-            float n2 = hash(floor(p.zyx * 22.0 - uTime * 0.04));
-            float fog = smoothstep(0.18, 0.95, n * 0.6 + n2 * 0.4) * 0.22 * uStrength;
-            vec3 color = mix(vec3(0.03, 0.05, 0.12), vec3(0.16, 0.19, 0.36), fog);
-            gl_FragColor = vec4(color, fog);
+            vec3 p = normalize(vPos) * 3.0;
+            
+            // Layered noise for clouds
+            float n1 = snoise(p + uTime);
+            float n2 = snoise(p * 2.0 - uTime * 1.5);
+            float n3 = snoise(p * 4.0 + uTime * 2.0);
+            
+            float cloud = n1 * 0.5 + n2 * 0.25 + n3 * 0.125;
+            cloud = smoothstep(0.0, 1.0, cloud + 0.3); // increase density
+
+            // Rich nebula colors
+            vec3 colorDeep = vec3(0.02, 0.01, 0.08); // Dark space
+            vec3 colorBlue = vec3(0.1, 0.2, 0.5);   // Cyan/Blue
+            vec3 colorPink = vec3(0.4, 0.05, 0.3);  // Deep Pink
+            vec3 colorHighlight = vec3(0.8, 0.4, 0.8); // Bright pink/purple
+
+            vec3 finalColor = mix(colorDeep, colorBlue, smoothstep(0.1, 0.6, cloud));
+            finalColor = mix(finalColor, colorPink, smoothstep(0.4, 0.8, cloud));
+            finalColor = mix(finalColor, colorHighlight, smoothstep(0.7, 1.0, cloud));
+
+            gl_FragColor = vec4(finalColor * uStrength, cloud * 0.6);
           }
         `}
       />
@@ -147,16 +219,109 @@ const NebulaShell = ({ qualityMode }: { qualityMode: QualityMode }) => {
   );
 };
 
-// The leader becomes a radiant stellar body with corona, flare shells, and warm light cast
-const CentralStar = ({
-  leader,
-  dna,
-  leaderTransitionValue = 0,
-}: {
-  leader: GalaxyTeam;
-  dna: PlanetDNA;
-  leaderTransitionValue?: number;
-}) => {
+// --- NEW: Asteroid Belt ---
+const AsteroidBelt = ({ count = 400 }) => {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  
+  const particles = useMemo(() => {
+    const temp = [];
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 25 + Math.random() * 15; 
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      const y = (Math.random() - 0.5) * 4;
+      
+      const scale = 0.1 + Math.random() * 0.4;
+      const speed = 0.02 + Math.random() * 0.03;
+      
+      temp.push({ x, y, z, scale, speed, angle, radius });
+    }
+    return temp;
+  }, [count]);
+
+  useFrame(({ clock }) => {
+    if (!meshRef.current) return;
+    const t = clock.getElapsedTime();
+    particles.forEach((particle, i) => {
+      const currentAngle = particle.angle + t * particle.speed;
+      dummy.position.set(
+        Math.cos(currentAngle) * particle.radius,
+        particle.y + Math.sin(t * 2 + i) * 0.5,
+        Math.sin(currentAngle) * particle.radius
+      );
+      dummy.rotation.set(t * particle.speed, t * particle.speed * 1.5, 0);
+      dummy.scale.setScalar(particle.scale);
+      dummy.updateMatrix();
+      meshRef.current!.setMatrixAt(i, dummy.matrix);
+    });
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    <instancedMesh ref={meshRef} args={[undefined, undefined, count]} castShadow receiveShadow>
+      <dodecahedronGeometry args={[1, 0]} />
+      <meshStandardMaterial color="#4a4f5c" roughness={0.9} metalness={0.1} />
+    </instancedMesh>
+  );
+};
+
+// --- ENHANCED: Multiple Live Comets ---
+const LiveComets = ({ count = 4 }: { count?: number }) => {
+  const comets = useMemo(() => {
+    return Array.from({ length: count }).map(() => ({
+      speed: 0.1 + Math.random() * 0.15,
+      offsetY: (Math.random() - 0.5) * 40,
+      offsetZ: (Math.random() - 0.5) * 40,
+      angle: Math.random() * Math.PI,
+      color: Math.random() > 0.5 ? '#d9ebff' : '#ffd9eb'
+    }));
+  }, [count]);
+
+  return (
+    <group>
+      {comets.map((c, i) => (
+        <Comet key={i} {...c} />
+      ))}
+    </group>
+  );
+};
+
+const Comet = ({ speed, offsetY, offsetZ, angle, color }: any) => {
+  const cometRef = useRef<THREE.Mesh>(null);
+  const trailRef = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime() * speed;
+    const cycle = (t % 1.0) * 2 - 1; 
+    
+    const x = cycle * 150 * Math.cos(angle);
+    const z = offsetZ + cycle * 150 * Math.sin(angle);
+    const y = offsetY + Math.sin(t * 10) * 2;
+
+    if (cometRef.current) cometRef.current.position.set(x, y, z);
+    if (trailRef.current) {
+      trailRef.current.position.set(x - Math.cos(angle)*4, y, z - Math.sin(angle)*4);
+      trailRef.current.lookAt(x, y, z);
+    }
+  });
+
+  return (
+    <group>
+      <mesh ref={cometRef}>
+        <sphereGeometry args={[0.3, 12, 12]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.9} />
+      </mesh>
+      <mesh ref={trailRef}>
+        <coneGeometry args={[1.5, 8, 12]} /> 
+        <meshBasicMaterial color={color} transparent opacity={0.2} depthWrite={false} map={getGlowSprite()} blending={THREE.AdditiveBlending} />
+      </mesh>
+    </group>
+  );
+};
+
+const CentralStar = ({ leader, dna, leaderTransitionValue = 0 }: { leader: GalaxyTeam; dna: PlanetDNA; leaderTransitionValue?: number; }) => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const glowRef = useRef<THREE.Mesh>(null);
   const coronaRef = useRef<THREE.Mesh>(null);
@@ -193,7 +358,6 @@ const CentralStar = ({
 
   return (
     <group ref={groupRef}>
-      {/* Core stellar body with plasma shader */}
       <mesh>
         <sphereGeometry args={[starRadius, 64, 64]} />
         <shaderMaterial
@@ -241,28 +405,23 @@ const CentralStar = ({
         />
       </mesh>
 
-      {/* Inner glow shell */}
       <mesh ref={glowRef}>
         <sphereGeometry args={[starRadius * 1.25, 32, 32]} />
         <meshBasicMaterial color={dna.palette.emissive} transparent opacity={0.22} depthWrite={false} />
       </mesh>
 
-      {/* Corona shell — larger, fainter, simulating solar atmosphere */}
       <mesh ref={coronaRef}>
         <sphereGeometry args={[starRadius * 2.2, 32, 32]} />
         <meshBasicMaterial color="#ffcc88" transparent opacity={0.08 + leaderTransitionValue * 0.04} depthWrite={false} />
       </mesh>
 
-      {/* Flare shell — asymmetric glow simulating solar flares */}
       <mesh ref={flareRef}>
         <sphereGeometry args={[starRadius * 3.0, 24, 24]} />
         <meshBasicMaterial color="#ffa555" transparent opacity={0.035 + leaderTransitionValue * 0.025} depthWrite={false} />
       </mesh>
 
-      {/* Gravitational shimmer particles around the leader */}
       <GravitationalShimmer radius={starRadius * 2.5} intensity={0.6 + leaderTransitionValue * 0.4} />
 
-      {/* Leader Label */}
       <Billboard position={[0, starRadius * 2.0, 0]}>
         <Text
           fontSize={1.4}
@@ -279,7 +438,6 @@ const CentralStar = ({
   );
 };
 
-// Shimmer particles that orbit close to the star, giving gravitational field feel
 const GravitationalShimmer = ({ radius, intensity }: { radius: number; intensity: number }) => {
   const count = 120;
   const matRef = useRef<THREE.PointsMaterial>(null);
@@ -339,7 +497,7 @@ const Ring = ({ radius, color, tilt }: { radius: number; color: string; tilt?: n
         roughness={0.7} 
         metalness={0.1} 
         side={THREE.DoubleSide} 
-        map={getGlowSprite()} // Gives the rings a softer, dusty look
+        map={getGlowSprite()} 
       />
     </mesh>
   );
@@ -360,7 +518,6 @@ const PlanetNode = ({
   const cloudRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = React.useState(false);
 
-  // Rule 2: planet radius scales with normalizedInfluence (wider range for dramatic effect)
   const scaleTarget = 0.7 + team.normalizedInfluence * 2.8;
   const { planetScale } = useSpring({
     planetScale: scaleTarget * (isSelected ? 1.18 : hovered ? 1.08 : 1) * (1 + pulseValue * 0.22 + (isPreviousLeader ? transitionValue * 0.08 : 0)),
@@ -370,7 +527,6 @@ const PlanetNode = ({
   const baseColor = useMemo(() => hexToColor(dna.palette.base), [dna.palette.base]);
   const emissiveColor = useMemo(() => hexToColor(dna.palette.emissive), [dna.palette.emissive]);
 
-  // Moon count scales with currentPoints influence
   const moonCount = Math.round(
     dna.moonRange[0] + (dna.moonRange[1] - dna.moonRange[0]) * Math.min(1, team.normalizedInfluence + 0.15),
   );
@@ -386,7 +542,6 @@ const PlanetNode = ({
     [moonCount, team.normalizedInfluence, dna.seed],
   );
 
-  // Rule 3: planets orbit around center using smooth lerp (no teleporting)
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
     const t = clock.getElapsedTime();
@@ -405,19 +560,11 @@ const PlanetNode = ({
     onSelectTeam(team.id);
   };
 
-  // Near-leader rivals get stronger specular highlights from the leader star
   const rivalLightingBoost = Math.max(0, 1 - team.scoreGapToLeader / Math.max(leader.currentPoints * 0.35, 1));
-
-  // Ring visibility: rings appear based on DNA probability + influence growth
   const showRing = dna.ringProbability > 0.38 && (team.normalizedInfluence > 0.3 || dna.ringProbability > 0.7);
-
-  // Atmospheric depth deepens with influence
   const atmosphereOpacity = 0.10 + team.normalizedInfluence * 0.20 + (hovered ? 0.08 : 0) + pulseValue * 0.12;
   const atmosphereScale = 1.10 + team.normalizedInfluence * 0.18;
-
-  // Cloud opacity intensifies with influence
   const cloudOpacity = 0.10 + dna.cloudStrength * 0.22 + team.normalizedInfluence * 0.08;
-
   const surfaceTexture = useMemo(() => generatePlanetTexture(dna), [dna]);
 
   return (
@@ -428,15 +575,17 @@ const PlanetNode = ({
       onPointerOut={() => setHovered(false)}
       onClick={handleSelect}
     >
-      {/* Core planet surface */}
       <mesh castShadow receiveShadow>
-        <sphereGeometry args={[1, qualityMode === 'cinematic' ? 52 : 34, qualityMode === 'cinematic' ? 52 : 34]} />
+        {/* ⭐ Increased polygons for perfectly round cinematic spheres */}
+        <sphereGeometry args={[1, qualityMode === 'cinematic' ? 128 : 34, qualityMode === 'cinematic' ? 128 : 34]} />
         <meshStandardMaterial
           color={baseColor}
           map={surfaceTexture}
-          roughnessMap={surfaceTexture} // Reuse as roughness map
+          roughnessMap={surfaceTexture}
+          bumpMap={surfaceTexture} // ⭐ ADDED bump mapping for physical texture depth
+          bumpScale={0.06}
           roughness={Math.max(0.12, dna.roughnessBase - team.normalizedInfluence * 0.18)}
-          metalness={0.12 + rivalLightingBoost * 0.18}
+          metalness={0.25 + rivalLightingBoost * 0.18} // ⭐ Enhanced metalness for better HDRI reflections
           emissive={emissiveColor}
           emissiveIntensity={
             0.05 +
@@ -448,7 +597,6 @@ const PlanetNode = ({
         />
       </mesh>
 
-      {/* Cloud layer */}
       <mesh ref={cloudRef} scale={1.03 + dna.cloudStrength * 0.12}>
         <sphereGeometry args={[1, 28, 28]} />
         <meshStandardMaterial
@@ -461,7 +609,6 @@ const PlanetNode = ({
         />
       </mesh>
 
-      {/* Atmosphere shell — depth scales with influence */}
       <mesh scale={atmosphereScale}>
         <sphereGeometry args={[1, 28, 28]} />
         <meshBasicMaterial
@@ -472,20 +619,16 @@ const PlanetNode = ({
         />
       </mesh>
 
-      {/* Rings — prominence grows with influence */}
       {showRing ? (
         <Ring radius={1 + team.normalizedInfluence * 0.3} color={dna.palette.secondary} tilt={dna.axialTilt * 0.3} />
       ) : null}
 
-      {/* Moons */}
       {moons.map((moon, idx) => (
         <Moon key={`${team.id}-moon-${idx}`} moon={moon} />
       ))}
 
-      {/* Score-change energy ripple: visible when pulseValue > 0 */}
       {pulseValue > 0.05 ? <ScoreRipple intensity={pulseValue} color={dna.palette.emissive} /> : null}
 
-      {/* Planet Label */}
       <Billboard position={[0, 1.5 + team.normalizedInfluence * 0.5, 0]}>
         <Text
           fontSize={hovered ? 0.8 : 0.6}
@@ -504,7 +647,6 @@ const PlanetNode = ({
   );
 };
 
-// Rule 5: Visible energy ripple when a team gains points
 const ScoreRipple = ({ intensity, color }: { intensity: number; color: string }) => {
   const ringRef = useRef<THREE.Mesh>(null);
   const startTimeRef = useRef<number | null>(null);
@@ -552,19 +694,20 @@ const Moon = ({
   );
 };
 
-// Rule 4: Camera acknowledges leader changes by auto-recentering
 const CameraRig = ({
   selectedTeamId,
   teams,
   onResetViewKey,
   leaderTransitionValue = 0,
   focusTarget,
+  isFreeView,
 }: {
   selectedTeamId: string | null;
   teams: GalaxyTeam[];
   onResetViewKey?: number;
   leaderTransitionValue?: number;
   focusTarget: THREE.Vector3;
+  isFreeView?: boolean;
 }) => {
   const controlsRef = useRef<any>(null);
   const targetRef = useRef(new THREE.Vector3(0, 0, 0));
@@ -573,11 +716,11 @@ const CameraRig = ({
   const leaderAckRef = useRef(false);
 
   useEffect(() => {
-    if (!selectedTeamId) {
+    if (!selectedTeamId && !isFreeView) {
       targetRef.current.set(0, 0, 0);
       desiredCameraPosRef.current.set(0, 18, 52);
     }
-  }, [selectedTeamId, teams]);
+  }, [selectedTeamId, teams, isFreeView]);
 
   useEffect(() => {
     if (onResetViewKey === undefined) return;
@@ -585,7 +728,6 @@ const CameraRig = ({
     desiredCameraPosRef.current.set(0, 18, 52);
   }, [onResetViewKey]);
 
-  // When a leader transition starts, briefly acknowledge the new center
   useEffect(() => {
     if (leaderTransitionValue > 0.8 && !selectedTeamId) {
       leaderAckRef.current = true;
@@ -595,27 +737,33 @@ const CameraRig = ({
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
 
+    if (isFreeView) {
+      if (controlsRef.current) {
+        desiredCameraPosRef.current.copy(camera.position);
+        targetRef.current.copy(controlsRef.current.target);
+        controlsRef.current.update();
+        focusTarget.copy(controlsRef.current.target);
+      }
+      return; 
+    }
+
     if (selectedTeamId) {
       const selected = teams.find((team) => team.id === selectedTeamId);
       if (selected) {
         const dynamicFocus = getOrbitalPosition(selected, t);
         targetRef.current.lerp(dynamicFocus, 0.12);
         
-        // Base pullback plus extra distance based on how large the planet is (normalizedInfluence)
-        // Leader (rank 1) gets a much larger pullback because the central star is huge
         const sizePullback = selected.normalizedInfluence * 12;
         const rankPullback = selected.rank === 1 ? 22 : 4;
         const totalPullback = rankPullback + sizePullback;
 
         _tmpVec.copy(dynamicFocus).add(focusOffset);
-        // Adjust the Y and Z offsets proportionally to the pullback
         _tmpVec.y += totalPullback * 0.4;
         _tmpVec.z += totalPullback;
         
         desiredCameraPosRef.current.lerp(_tmpVec, 0.11);
       }
     } else if (leaderAckRef.current) {
-      // Graceful recentering on new leader during transition
       targetRef.current.lerp(new THREE.Vector3(0, 0, 0), 0.06);
       desiredCameraPosRef.current.lerp(new THREE.Vector3(0, 14, 38), 0.04);
       if (targetRef.current.lengthSq() < 0.5) {
@@ -645,7 +793,7 @@ const CameraRig = ({
       <PerspectiveCamera makeDefault fov={44} near={0.1} far={900} position={[0, 18, 52]} />
       <OrbitControls
         ref={controlsRef}
-        enablePan={false}
+        enablePan={isFreeView} 
         minDistance={8}
         maxDistance={120}
         maxPolarAngle={Math.PI * 0.86}
@@ -657,38 +805,6 @@ const CameraRig = ({
   );
 };
 
-const CometStreak = ({ qualityMode }: { qualityMode: QualityMode }) => {
-  const cometRef = useRef<THREE.Mesh>(null);
-  const trailRef = useRef<THREE.Mesh>(null);
-  const speed = qualityMode === 'cinematic' ? 0.17 : 0.12;
-
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime() * speed;
-    const cycle = (t % 1.0) * 2 - 1;
-    const x = cycle * 100;
-    const y = 18 + Math.sin(t * 8) * 6;
-    const z = -45 + Math.cos(t * 4) * 15;
-    if (cometRef.current) {
-      cometRef.current.position.set(x, y, z);
-    }
-    if (trailRef.current) {
-      trailRef.current.position.set(x - 3, y, z);
-    }
-  });
-
-  return (
-    <group>
-      <mesh ref={cometRef}>
-        <sphereGeometry args={[0.2, 12, 12]} />
-        <meshBasicMaterial color="#d9ebff" transparent opacity={0.8} />
-      </mesh>
-      <mesh ref={trailRef}>
-        <sphereGeometry args={[1.5, 12, 12]} />
-        <meshBasicMaterial color="#8ab6ff" transparent opacity={0.3} depthWrite={false} map={getGlowSprite()} blending={THREE.AdditiveBlending} />
-      </mesh>
-    </group>
-  );
-};
 
 const GalaxyScene = ({
   teams,
@@ -700,6 +816,7 @@ const GalaxyScene = ({
   previousLeaderId,
   leaderTransitionValue = 0,
   pulseByTeamId = {},
+  isFreeView,
 }: GalaxyCanvasProps) => {
   const leader = teams[0];
   const focusTarget = useMemo(() => new THREE.Vector3(0, 0, 0), []);
@@ -708,8 +825,8 @@ const GalaxyScene = ({
 
   return (
     <>
-      <color attach="background" args={['#03050a']} />
-      <fog attach="fog" args={['#070a15', 90, 320]} />
+      <color attach="background" args={['#010204']} />
+      <fog attach="fog" args={['#010204', 90, 380]} />
 
       <CameraRig
         teams={teams}
@@ -717,17 +834,32 @@ const GalaxyScene = ({
         onResetViewKey={onResetViewKey}
         leaderTransitionValue={leaderTransitionValue}
         focusTarget={focusTarget}
+        isFreeView={isFreeView}
       />
 
-      <ambientLight intensity={0.24} color="#94a7c8" />
-      {/* The central star casts warm light onto nearby planets */}
-      <pointLight position={[0, 0, 0]} intensity={42 + leader.normalizedInfluence * 15} color="#ffd6a6" decay={1.6} />
-      <directionalLight position={[14, 12, 10]} intensity={1.4} color="#d6e2ff" />
+      {/* ⭐ ADDED: Environment mapping for cinematic planet reflections */}
+      {qualityMode === 'cinematic' && <Environment preset="night" environmentIntensity={0.25} />}
+
+      <ambientLight intensity={0.4} color="#6c8cbf" />
+      {/* ⭐ ADDED: castShadow and higher resolution shadow maps */}
+      <pointLight 
+        position={[0, 0, 0]} 
+        intensity={60 + leader.normalizedInfluence * 15} 
+        color="#ffd6a6" 
+        decay={1.8} 
+        castShadow 
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+      />
+      <directionalLight position={[20, 30, 20]} intensity={1.8} color="#e6efff" castShadow />
+      <directionalLight position={[-20, -10, -20]} intensity={0.5} color="#c232ff" />
 
       <NebulaShell qualityMode={qualityMode} />
-      <Stars radius={320} depth={180} count={qualityMode === 'cinematic' ? 1400 : 750} factor={4} saturation={0} fade speed={0.4} />
+      <Stars radius={300} depth={150} count={qualityMode === 'cinematic' ? 5000 : 2000} factor={6} saturation={0.8} fade speed={0.6} />
       <StarfieldDust qualityMode={qualityMode} />
-      <CometStreak qualityMode={qualityMode} />
+      
+      <LiveComets count={qualityMode === 'cinematic' ? 5 : 2} />
+      {qualityMode === 'cinematic' && <AsteroidBelt count={350} />}
 
       <CentralStar leader={leader} dna={dnaByTeam[leader.id]} leaderTransitionValue={leaderTransitionValue} />
 
@@ -746,7 +878,11 @@ const GalaxyScene = ({
         />
       ))}
 
-      <EffectComposer enableNormalPass={false} multisampling={qualityMode === 'cinematic' ? 4 : 0}>
+      {/* ⭐ ADDED: SSAO and increased multisampling for maximum fidelity */}
+      <EffectComposer enableNormalPass={false} multisampling={qualityMode === 'cinematic' ? 8 : 0}>
+        {qualityMode === 'cinematic' && (
+          <SSAO radius={0.4} intensity={50} luminanceInfluence={0.4} color="black" />
+        )}
         <DepthOfField 
           focusDistance={0.015} 
           focalLength={0.06} 
@@ -754,15 +890,15 @@ const GalaxyScene = ({
           target={focusTarget}
         />
         <Bloom
-          intensity={qualityMode === 'cinematic' ? 1.5 : 0.8}
-          luminanceThreshold={0.15}
-          luminanceSmoothing={0.75}
+          intensity={qualityMode === 'cinematic' ? 2.0 : 1.2}
+          luminanceThreshold={0.12}
+          luminanceSmoothing={0.8}
           mipmapBlur
         />
-        {/* @ts-ignore - The react-three/postprocessing types are outdated for ChromaticAberration in this version */}
-        <ChromaticAberration offset={new THREE.Vector2(0.0006, 0.0006)} />
-        <Noise opacity={0.018} />
-        <Vignette eskil={false} offset={0.18} darkness={0.7} />
+        {/* @ts-ignore */}
+        <ChromaticAberration offset={new THREE.Vector2(0.001, 0.001)} />
+        <Noise opacity={0.025} />
+        <Vignette eskil={false} offset={0.1} darkness={0.85} />
       </EffectComposer>
     </>
   );
@@ -770,7 +906,17 @@ const GalaxyScene = ({
 
 export function GalaxyCanvas(props: GalaxyCanvasProps) {
   return (
-    <Canvas shadows dpr={[1, 2]} gl={{ antialias: true, powerPreference: 'high-performance' }}>
+    <Canvas 
+      shadows="soft" // ⭐ ADDED: Soft shadows
+      dpr={Math.max(window.devicePixelRatio, 2)} // ⭐ ADDED: Forced native resolution
+      gl={{ 
+        antialias: true, 
+        powerPreference: 'high-performance',
+        toneMapping: THREE.ACESFilmicToneMapping, // ⭐ ADDED: Hollywood color grading
+        toneMappingExposure: 1.2,
+        useLegacyLights: false
+      }}
+    >
       <GalaxyScene {...props} />
     </Canvas>
   );
