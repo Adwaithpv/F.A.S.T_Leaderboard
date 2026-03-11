@@ -2,6 +2,8 @@ import { Team, Game } from '../context/TournamentContext';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+const SCALE = 2; // 2x resolution for crisp PDF output
+
 function slugify(s: string) {
   return s.toLowerCase().replace(/\s+/g, '_');
 }
@@ -55,9 +57,20 @@ const RANK_COLORS: Record<number, string> = {
   3: PDF_COLORS.bronze,
 };
 
+// ── Create high-res canvas ────────────────────────────────────────────────────
+
+function createCanvas(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+  const canvas = document.createElement('canvas');
+  canvas.width = w * SCALE;
+  canvas.height = h * SCALE;
+  const ctx = canvas.getContext('2d')!;
+  ctx.scale(SCALE, SCALE);
+  return { canvas, ctx };
+}
+
 // ── Canvas → PDF ─────────────────────────────────────────────────────────────
 
-function buildPDFFromCanvas(canvas: HTMLCanvasElement): Promise<Uint8Array> {
+function buildPDFFromCanvas(canvas: HTMLCanvasElement, logicalW: number, logicalH: number): Promise<Uint8Array> {
   return new Promise((resolve) => {
     canvas.toBlob((blob) => {
       if (!blob) return;
@@ -68,7 +81,7 @@ function buildPDFFromCanvas(canvas: HTMLCanvasElement): Promise<Uint8Array> {
         const imgLen = imgBytes.length;
         const W = canvas.width, H = canvas.height;
         const ptW = 595;
-        const ptH = Math.round((H / W) * ptW);
+        const ptH = Math.round((logicalH / logicalW) * ptW);
         const enc = new TextEncoder();
         const parts: Uint8Array[] = [];
         const offsets: number[] = [];
@@ -100,7 +113,7 @@ function buildPDFFromCanvas(canvas: HTMLCanvasElement): Promise<Uint8Array> {
         resolve(total);
       };
       reader.readAsDataURL(blob);
-    }, 'image/jpeg', 0.95);
+    }, 'image/jpeg', 1.0);
   });
 }
 
@@ -170,9 +183,7 @@ export async function exportOverviewPDF(entries: OverviewAllRoundsEntry[], event
   const W = 860, ROW_H = 50, HEADER_H = 90, TABLE_HEAD_H = 36, FOOTER_H = 40;
   const H = HEADER_H + TABLE_HEAD_H + sorted.length * ROW_H + FOOTER_H;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = W; canvas.height = H;
-  const ctx = canvas.getContext('2d')!;
+  const { canvas, ctx } = createCanvas(W, H);
 
   ctx.fillStyle = PDF_COLORS.bg; ctx.fillRect(0, 0, W, H);
   drawHeader(ctx, W, eventName, 'GLOBAL RANKINGS — ALL ROUNDS', PDF_COLORS.gold, sorted.length);
@@ -223,8 +234,8 @@ export async function exportOverviewPDF(entries: OverviewAllRoundsEntry[], event
 
   drawFooter(ctx, W, HEADER_H + TABLE_HEAD_H + sorted.length * ROW_H, `${eventName} · Overview · All Rounds · ${new Date().toLocaleDateString()}`);
 
-  const pdfBytes = await buildPDFFromCanvas(canvas);
-  triggerDownload(new Blob([pdfBytes], { type: 'application/pdf' }), `${slugify(eventName)}_overview_all_rounds.pdf`);
+  const pdfBytes = await buildPDFFromCanvas(canvas, W, H);
+  triggerDownload(new Blob([pdfBytes as unknown as BlobPart], { type: 'application/pdf' }), `${slugify(eventName)}_overview_all_rounds.pdf`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -266,9 +277,7 @@ export async function exportGamePDF(entries: GameAllRoundsEntry[], game: Game, e
   const W = 800, ROW_H = 50, HEADER_H = 90, TABLE_HEAD_H = 36, FOOTER_H = 40;
   const H = HEADER_H + TABLE_HEAD_H + sorted.length * ROW_H + FOOTER_H;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = W; canvas.height = H;
-  const ctx = canvas.getContext('2d')!;
+  const { canvas, ctx } = createCanvas(W, H);
 
   ctx.fillStyle = PDF_COLORS.bg; ctx.fillRect(0, 0, W, H);
   drawHeader(ctx, W, `${eventName} · ${game.name}`, 'INDIVIDUAL EVENT RANKINGS — ALL ROUNDS', game.color, sorted.length);
@@ -319,6 +328,6 @@ export async function exportGamePDF(entries: GameAllRoundsEntry[], game: Game, e
 
   drawFooter(ctx, W, HEADER_H + TABLE_HEAD_H + sorted.length * ROW_H, `${eventName} · ${game.name} · All Rounds · ${new Date().toLocaleDateString()}`);
 
-  const pdfBytes = await buildPDFFromCanvas(canvas);
-  triggerDownload(new Blob([pdfBytes], { type: 'application/pdf' }), `${slugify(eventName)}_${slugify(game.name)}_all_rounds.pdf`);
+  const pdfBytes = await buildPDFFromCanvas(canvas, W, H);
+  triggerDownload(new Blob([pdfBytes as unknown as BlobPart], { type: 'application/pdf' }), `${slugify(eventName)}_${slugify(game.name)}_all_rounds.pdf`);
 }
