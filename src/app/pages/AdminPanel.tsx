@@ -30,7 +30,7 @@ export function AdminPanel() {
     const activeTeams = teams.filter(t => activeTeamIds.includes(t.id));
     
     activeTeams.forEach(t => {
-      initialLocal[t.id] = scores[selectedGame][selectedRound][t.id] || 0;
+      initialLocal[t.id] = scores[selectedGame]?.[selectedRound]?.[t.id] ?? 0;
     });
     setLocalScores(initialLocal);
   }, [selectedGame, selectedRound, scores, teams, roundTeams]);

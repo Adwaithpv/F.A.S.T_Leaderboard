@@ -1,5 +1,6 @@
+/// <reference types="vite/client" />
 import { initializeApp } from 'firebase/app';
-import { getDatabase } from 'firebase/database';
+import { getDatabase, type Database } from 'firebase/database';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -11,5 +12,30 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const app = initializeApp(firebaseConfig);
-export const db = getDatabase(app);
+const isConfigured =
+  typeof firebaseConfig.apiKey === 'string' &&
+  firebaseConfig.apiKey.length > 0 &&
+  typeof firebaseConfig.databaseURL === 'string' &&
+  firebaseConfig.databaseURL.length > 0;
+
+let app: ReturnType<typeof initializeApp> | null = null;
+let db: Database | null = null;
+
+if (isConfigured) {
+  try {
+    app = initializeApp(firebaseConfig);
+    db = getDatabase(app);
+    console.log('[Firebase] Initialized successfully. DB URL:', firebaseConfig.databaseURL);
+  } catch (e) {
+    console.warn('[Firebase] Failed to initialize:', e);
+  }
+} else {
+  console.warn(
+    '[Firebase] NOT configured. apiKey present:',
+    typeof firebaseConfig.apiKey === 'string' && firebaseConfig.apiKey.length > 0,
+    '| databaseURL present:',
+    typeof firebaseConfig.databaseURL === 'string' && firebaseConfig.databaseURL.length > 0,
+  );
+}
+
+export { db, isConfigured as isFirebaseConfigured };
