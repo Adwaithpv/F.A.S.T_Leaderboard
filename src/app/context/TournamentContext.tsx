@@ -24,6 +24,11 @@ export type Round = {
   name: string;
 };
 
+export type RoundVisualizationSettings = {
+  visiblePlanetCount: number;
+  dwarfPlanetCount: number;
+};
+
 export type Scores = {
   [gameId: string]: {
     [roundId: string]: {
@@ -38,12 +43,16 @@ interface TournamentContextType {
   rounds: Round[];
   scores: Scores;
   roundTeams: Record<string, string[]>;
+  roundVisualization: Record<string, RoundVisualizationSettings>;
   updateScore: (gameId: string, roundId: string, teamId: string, score: number) => void;
   getOverallScores: (roundId: string) => { team: Team; total: number; breakdown: { game: Game; score: number }[] }[];
   getGameScores: (gameId: string, roundId: string) => { team: Team; score: number }[];
   addTeamToRound: (roundId: string, team: Omit<Team, 'id'>) => void;
   removeTeamFromRound: (roundId: string, teamId: string) => void;
   updateTeam: (teamId: string, updates: Partial<Team>) => void;
+  addGame: (game: Omit<Game, 'id'>) => void;
+  updateGame: (gameId: string, updates: Partial<Game>) => void;
+  updateRoundVisualization: (roundId: string, updates: Partial<RoundVisualizationSettings>) => void;
 }
 
 const defaultTeams: Team[] = [
@@ -71,6 +80,12 @@ const defaultRounds: Round[] = [
   { id: 'r2', name: 'Round 2' },
   { id: 'r3', name: 'Round 3' },
 ];
+
+const defaultRoundVisualization: Record<string, RoundVisualizationSettings> = {
+  r1: { visiblePlanetCount: 40, dwarfPlanetCount: 12 },
+  r2: { visiblePlanetCount: 20, dwarfPlanetCount: 6 },
+  r3: { visiblePlanetCount: 20, dwarfPlanetCount: 6 },
+};
 
 const buildZeroScores = (games: Game[], rounds: Round[], teams: Team[]) => {
   const scores: Scores = {};
@@ -210,6 +225,33 @@ function roundTeamsFromFirebase(
   return normalized;
 }
 
+function roundVisualizationFromFirebase(
+  val: unknown,
+  rounds: Round[],
+): Record<string, RoundVisualizationSettings> {
+  const source = val && typeof val === 'object' ? (val as Record<string, unknown>) : {};
+  const normalized: Record<string, RoundVisualizationSettings> = {};
+
+  rounds.forEach((round, index) => {
+    const fallback =
+      defaultRoundVisualization[round.id] ??
+      (index === 0
+        ? { visiblePlanetCount: 40, dwarfPlanetCount: 12 }
+        : { visiblePlanetCount: 20, dwarfPlanetCount: 6 });
+    const raw = source[round.id];
+    const candidate = raw && typeof raw === 'object' ? (raw as Partial<RoundVisualizationSettings>) : {};
+    const visiblePlanetCount = Number(candidate.visiblePlanetCount);
+    const dwarfPlanetCount = Number(candidate.dwarfPlanetCount);
+
+    normalized[round.id] = {
+      visiblePlanetCount: Number.isFinite(visiblePlanetCount) ? Math.max(1, Math.round(visiblePlanetCount)) : fallback.visiblePlanetCount,
+      dwarfPlanetCount: Number.isFinite(dwarfPlanetCount) ? Math.max(0, Math.round(dwarfPlanetCount)) : fallback.dwarfPlanetCount,
+    };
+  });
+
+  return normalized;
+}
+
 const TournamentContext = createContext<TournamentContextType | null>(null);
 
 export function TournamentProvider({ children }: { children: React.ReactNode }) {
@@ -219,6 +261,9 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
   const [rounds, setRounds] = useState<Round[]>(defaultRounds);
   const [scores, setScores] = useState<Scores>(() =>
     buildZeroScores(defaultGames, defaultRounds, defaultTeams)
+  );
+  const [roundVisualization, setRoundVisualization] = useState<Record<string, RoundVisualizationSettings>>(
+    () => defaultRoundVisualization,
   );
   const [roundTeams, setRoundTeams] = useState<Record<string, string[]>>(() => {
     const initial: Record<string, string[]> = {};
@@ -246,6 +291,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
           games: Object.fromEntries(defaultGames.map(g => [g.id, g])),
           rounds: Object.fromEntries(defaultRounds.map(r => [r.id, r])),
           scores: buildZeroScores(defaultGames, defaultRounds, defaultTeams),
+          roundVisualization: defaultRoundVisualization,
           roundTeams: Object.fromEntries(
             defaultRounds.map(r => [r.id, defaultTeams.map(t => t.id)])
           ),
@@ -258,6 +304,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
       const nextGames = gamesFromFirebase(data.games);
       const nextRounds = roundsFromFirebase(data.rounds);
       const nextRoundTeams = roundTeamsFromFirebase(data.roundTeams, nextRounds, nextTeams);
+      const nextRoundVisualization = roundVisualizationFromFirebase(data.roundVisualization, nextRounds);
       const nextScores = scoresFromFirebase(data.scores, nextGames, nextRounds, nextTeams);
 
       console.log('[Tournament] Parsed scores sample (first game, first round):', 
@@ -270,6 +317,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
       setGames(nextGames);
       setRounds(nextRounds);
       setRoundTeams(nextRoundTeams);
+      setRoundVisualization(nextRoundVisualization);
       setScores(nextScores);
       setLoaded(true);
     }, (error) => {
@@ -326,6 +374,22 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
     const newTeam = { id: newTeamId, ...teamData };
 
     setTeams(prev => [...prev, newTeam]);
+    setScores(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach((gameId) => {
+        next[gameId] = { ...next[gameId] };
+        Object.keys(next[gameId] ?? {}).forEach((existingRoundId) => {
+          next[gameId][existingRoundId] = {
+            ...next[gameId][existingRoundId],
+            [newTeamId]: 0,
+          };
+        });
+      });
+      if (db) {
+        update(ref(db, `${LEADERBOARD_PATH}/scores`), next);
+      }
+      return next;
+    });
     setRoundTeams(prev => {
       const next = { ...prev, [roundId]: [...(prev[roundId] || []), newTeamId] };
       if (db) {
@@ -357,18 +421,74 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
     });
   }, []);
 
+  const addGame = useCallback((gameData: Omit<Game, 'id'>) => {
+    const newGameId = `g${Date.now()}`;
+    const newGame = { id: newGameId, ...gameData };
+
+    setGames((prev) => [...prev, newGame]);
+    setScores((prev) => {
+      const nextGameScores: Scores[string] = {};
+      rounds.forEach((round) => {
+        nextGameScores[round.id] = {};
+        teams.forEach((team) => {
+          nextGameScores[round.id][team.id] = 0;
+        });
+      });
+      const next = {
+        ...prev,
+        [newGameId]: nextGameScores,
+      };
+      if (db) {
+        update(ref(db, `${LEADERBOARD_PATH}/games/${newGameId}`), newGame);
+        update(ref(db, `${LEADERBOARD_PATH}/scores/${newGameId}`), nextGameScores);
+      }
+      return next;
+    });
+  }, [rounds, teams]);
+
+  const updateGame = useCallback((gameId: string, updates: Partial<Game>) => {
+    setGames((prev) => {
+      const next = prev.map((game) => (game.id === gameId ? { ...game, ...updates } : game));
+      if (db) {
+        update(ref(db, `${LEADERBOARD_PATH}/games/${gameId}`), updates);
+      }
+      return next;
+    });
+  }, []);
+
+  const updateRoundVisualization = useCallback((roundId: string, updates: Partial<RoundVisualizationSettings>) => {
+    setRoundVisualization((prev) => {
+      const current = prev[roundId] ?? defaultRoundVisualization[roundId] ?? { visiblePlanetCount: 20, dwarfPlanetCount: 6 };
+      const next = {
+        ...prev,
+        [roundId]: {
+          visiblePlanetCount: Math.max(1, Math.round(updates.visiblePlanetCount ?? current.visiblePlanetCount)),
+          dwarfPlanetCount: Math.max(0, Math.round(updates.dwarfPlanetCount ?? current.dwarfPlanetCount)),
+        },
+      };
+      if (db) {
+        update(ref(db, `${LEADERBOARD_PATH}/roundVisualization/${roundId}`), next[roundId]);
+      }
+      return next;
+    });
+  }, []);
+
   const value = {
     teams,
     games,
     rounds,
     scores,
     roundTeams,
+    roundVisualization,
     updateScore,
     getOverallScores,
     getGameScores,
     addTeamToRound,
     removeTeamFromRound,
     updateTeam,
+    addGame,
+    updateGame,
+    updateRoundVisualization,
   };
 
   if (!loaded) {

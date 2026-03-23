@@ -53,6 +53,10 @@ export type GalaxyTeam = {
   orbitInclination: number;
   orbitEccentricity: number;
   orbitPhase: number;
+  spiralOffset: number;
+  orbitHeight: number;
+  sizeScale: number;
+  isDwarfPlanet: boolean;
 };
 
 export type BaseTeamInput = {
