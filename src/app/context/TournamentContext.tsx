@@ -66,6 +66,13 @@ const defaultTeams: Team[] = [
   { id: 't8', name: 'Team Aurora', icon: 'sparkles', basePoints: 540, colorHint: '#6ee8d5' },
   { id: 't9', name: 'Team Zenith', icon: 'rocket', basePoints: 260, colorHint: '#ffc682' },
   { id: 't10', name: 'Team Vortex', icon: 'wind', basePoints: 185, colorHint: '#94b2ff' },
+  ...Array.from({ length: 24 }).map((_, i) => ({
+    id: `t${i + 11}`,
+    name: `Team ${i + 11}`,
+    icon: 'shield',
+    basePoints: Math.floor(Math.random() * 500) + 50,
+    colorHint: '#ffffff'
+  }))
 ];
 
 const defaultGames: Game[] = [

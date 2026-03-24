@@ -45,7 +45,6 @@ export function Layout() {
 
   const links = [
     { to: '/galaxy', label: 'Solar System', icon: Orbit },
-    { to: '/overview', label: 'Overview', icon: Trophy },
     ...games.map(g => ({
       to: `/game/${g.id}`,
       label: g.name,
