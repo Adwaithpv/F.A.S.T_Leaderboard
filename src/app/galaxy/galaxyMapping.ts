@@ -36,27 +36,28 @@ const PLANET_PALETTES: Record<PlanetClass, string[][]> = {
   storm_electric: [['#44516f', '#1d2740', '#7f98c9', '#98c6ff', '#74b9ff']],
 };
 
-const pickPlanetClass = (basePoints: number, random: () => number): PlanetClass => {
-  if (basePoints < 180) {
+const pickPlanetClass = (random: () => number): PlanetClass => {
+  const roll = random();
+  if (roll < 0.2) {
     return random() > 0.45 ? 'rocky' : 'obsidian';
   }
-  if (basePoints < 320) {
-    const roll = random();
-    if (roll < 0.26) return 'desert';
-    if (roll < 0.52) return 'oceanic';
-    if (roll < 0.76) return 'ice';
+  if (roll < 0.6) {
+    const subRoll = random();
+    if (subRoll < 0.26) return 'desert';
+    if (subRoll < 0.52) return 'oceanic';
+    if (subRoll < 0.76) return 'ice';
     return 'lush';
   }
-  if (basePoints < 520) {
+  if (roll < 0.85) {
     return random() > 0.35 ? 'gas_giant' : 'ringed_giant';
   }
   return random() > 0.55 ? 'aurora_exotic' : 'storm_electric';
 };
 
 export const derivePlanetDNA = (teamId: string, basePoints: number, colorHint?: string): PlanetDNA => {
-  const seed = hashString(`${teamId}-${basePoints}`);
+  const seed = hashString(teamId);
   const random = createSeededRandom(seed);
-  const planetClass = pickPlanetClass(basePoints, random);
+  const planetClass = pickPlanetClass(random);
   const paletteSet = PLANET_PALETTES[planetClass][0];
 
   const primary = colorHint ?? paletteSet[0];
@@ -136,6 +137,7 @@ const momentumFromDelta = (delta: number, maxPoints: number): MomentumState => {
 
 type MapOptions = {
   previousPointsByTeam?: Record<string, number>;
+  dwarfPlanetCount?: number;
 };
 
 // Mapping logic used by the 3D scene:
@@ -150,6 +152,7 @@ export const mapTournamentScoresToGalaxyTeams = (
   const leaderPoints = sorted[0]?.currentPoints ?? 0;
   const tailPoints = sorted[sorted.length - 1]?.currentPoints ?? 0;
   const spread = Math.max(leaderPoints - tailPoints, 1);
+  const dwarfPlanetCount = Math.max(0, Math.min(options.dwarfPlanetCount ?? 0, Math.max(sorted.length - 1, 0)));
 
   return sorted.map((item, index) => {
     const prevPoints = options.previousPointsByTeam?.[item.id] ?? item.currentPoints;
@@ -158,19 +161,22 @@ export const mapTournamentScoresToGalaxyTeams = (
     const scoreGapToPrev = index === 0 ? 0 : Math.max(0, sorted[index - 1].currentPoints - item.currentPoints);
     const normalizedInfluence = clamp01((item.currentPoints - tailPoints) / spread);
     const normalizedGap = clamp01(scoreGapToLeader / spread);
+    const relativeRank = index / Math.max(sorted.length - 1, 1);
+    const isDwarfPlanet = index > 0 && index >= sorted.length - dwarfPlanetCount;
 
-    // Rank 2 starts closest; each rank band adds generous distance to prevent overlap.
-    // Score gap compresses or stretches distances — close competitors orbit nearer together.
-    const baseRadius = 16 + index * 8.0;
-    const gapStretch = normalizedGap * 12;
-    const closeCompetitorPull = index > 0 && scoreGapToPrev < spread * 0.08 ? -2.0 : 0;
-    const orbitRadius = index === 0 ? 0 : Math.max(14, baseRadius + gapStretch + closeCompetitorPull);
+    const baseRadius = 7.5 + index * 2.15;
+    const spiralStretch = index === 0 ? 0 : Math.pow(index, 1.02) * 0.55;
+    const gapStretch = normalizedGap * 3.2;
+    const orbitRadius = index === 0 ? 0 : baseRadius + spiralStretch + gapStretch;
 
-    // Higher-ranked (closer) planets orbit faster — gravitational realism
-    const rankPull = 1 - index / Math.max(sorted.length - 1, 1);
-    const orbitSpeed = index === 0 ? 0 : lerp(0.03, 0.12, rankPull) * lerp(0.75, 1.2, 1 - normalizedGap);
+    const rankPull = 1 - relativeRank;
+    const orbitSpeed = index === 0 ? 0 : lerp(0.016, 0.042, rankPull) * lerp(0.88, 1.05, 1 - normalizedGap);
 
     const phaseSeed = createSeededRandom(hashString(`phase-${item.id}`));
+    const spiralOffset = index === 0 ? 0 : index * 0.52 + lerp(-0.08, 0.08, phaseSeed());
+    const orbitHeight = index === 0 ? 0 : lerp(-0.12, 0.12, phaseSeed());
+    const sizeScale = 0.88 / Math.pow(1.03, index);
+
     return {
       ...item,
       rank: index + 1,
@@ -183,9 +189,13 @@ export const mapTournamentScoresToGalaxyTeams = (
       orbitBand: index,
       orbitRadius,
       orbitSpeed,
-      orbitInclination: lerp(-0.38, 0.38, phaseSeed()),
-      orbitEccentricity: lerp(0.02, 0.24, phaseSeed()),
+      orbitInclination: lerp(-0.03, 0.03, phaseSeed()),
+      orbitEccentricity: lerp(0.005, 0.03, phaseSeed()),
       orbitPhase: lerp(0, Math.PI * 2, phaseSeed()),
+      spiralOffset,
+      orbitHeight,
+      sizeScale,
+      isDwarfPlanet,
     };
   });
 };

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { RotateCcw, Sparkles, Telescope, Move, X, MousePointer2 } from 'lucide-react';
+import { RotateCcw, Sparkles, Telescope, Move, X, MousePointer2, Orbit } from 'lucide-react';
 import { cn } from '../components/NeonButton';
 import { useTournament } from '../context/TournamentContext';
 import { GalaxyCanvas } from '../galaxy/GalaxyCanvas';
@@ -11,7 +11,7 @@ import { useIsMobile } from '../components/ui/use-mobile';
 type QualityMode = 'cinematic' | 'performance';
 
 export function GalaxyLeaderboardPage() {
-  const { rounds, getOverallScores } = useTournament();
+  const { rounds, getOverallScores, roundVisualization } = useTournament();
   const isMobile = useIsMobile();
   const [selectedRound, setSelectedRound] = useState(rounds[0].id);
   const [qualityMode, setQualityMode] = useState<QualityMode>('cinematic');
@@ -31,9 +31,17 @@ export function GalaxyLeaderboardPage() {
   const leaderTransitionRafRef = useRef<number | null>(null);
 
   const overallScores = useMemo(() => getOverallScores(selectedRound), [getOverallScores, selectedRound]);
+  const roundSceneSettings = roundVisualization[selectedRound] ?? {
+    visiblePlanetCount: overallScores.length,
+    dwarfPlanetCount: 0,
+  };
+  const visibleScores = useMemo(
+    () => overallScores.slice(0, Math.min(roundSceneSettings.visiblePlanetCount, overallScores.length)),
+    [overallScores, roundSceneSettings.visiblePlanetCount],
+  );
 
   const sourceTeams = useMemo(() => {
-    return overallScores.map((score) => {
+    return visibleScores.map((score) => {
       const basePoints =
         score.team.basePoints ??
         basePointsByTeamRef.current[score.team.id] ??
@@ -56,19 +64,14 @@ export function GalaxyLeaderboardPage() {
         currentPoints: score.total,
       };
     });
-  }, [overallScores]);
+  }, [visibleScores]);
 
   const galaxyTeams = useMemo(() => {
     return mapTournamentScoresToGalaxyTeams(sourceTeams, {
       previousPointsByTeam: previousPointsByTeamRef.current,
+      dwarfPlanetCount: roundSceneSettings.dwarfPlanetCount,
     });
-  }, [sourceTeams]);
-
-  useEffect(() => {
-    if (!selectedTeamId && galaxyTeams.length > 0) {
-      setSelectedTeamId(galaxyTeams[0].id);
-    }
-  }, [galaxyTeams, selectedTeamId]);
+  }, [roundSceneSettings.dwarfPlanetCount, sourceTeams]);
 
   // Score change feedback
   const pulseDecayRafRef = useRef<number | null>(null);
@@ -177,6 +180,12 @@ export function GalaxyLeaderboardPage() {
     setIsFreeView(false);
   };
 
+  const handleOverview = () => {
+    setSelectedTeamId(null);
+    setIsFreeView(false);
+    setResetViewKey((k) => k + 1);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -199,8 +208,6 @@ export function GalaxyLeaderboardPage() {
           isFreeView={isFreeView} // Passed down to canvas
         />
       </div>
-
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(124,158,255,0.16),transparent_42%),radial-gradient(circle_at_80%_100%,rgba(255,178,110,0.12),transparent_38%)]" />
 
       {/* --- FREE VIEW CONTROLS OVERLAY --- */}
       <div
@@ -234,7 +241,7 @@ export function GalaxyLeaderboardPage() {
         )}
       >
         <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-3 py-2 backdrop-blur-xl max-w-fit">
-          <h2 className="mr-2 text-sm font-display uppercase tracking-widest text-white/80">Galaxy Power Map</h2>
+          <h2 className="mr-2 text-sm font-display uppercase tracking-widest text-white/80">Solar System View</h2>
           
           {rounds.map((round) => (
             <button
@@ -272,11 +279,19 @@ export function GalaxyLeaderboardPage() {
               </span>
               <span className="text-xs text-slate-300">{selectedTeam.currentPoints} pts</span>
               <span className="text-xs text-slate-400">Gap {selectedTeam.scoreGapToLeader}</span>
+              <span className="text-xs text-slate-400">{topStrip.length} bodies</span>
               <span className="text-xs capitalize text-slate-400">{selectedTeam.momentum}</span>
               <span className={selectedTeam.deltaPoints >= 0 ? 'text-xs text-emerald-400' : 'text-xs text-rose-400'}>
                 {selectedTeam.deltaPoints >= 0 ? `+${selectedTeam.deltaPoints}` : selectedTeam.deltaPoints}
               </span>
               <div className="ml-auto flex items-center gap-1.5">
+                <button
+                  onClick={handleOverview}
+                  className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-slate-300 transition hover:bg-white/15"
+                >
+                  <Orbit size={10} />
+                  Overview
+                </button>
                 <button
                   onClick={() => setQualityMode(qualityMode === 'cinematic' ? 'performance' : 'cinematic')}
                   className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-slate-300 transition hover:bg-white/15"
@@ -297,6 +312,7 @@ export function GalaxyLeaderboardPage() {
           <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-white/10 bg-black/35 px-2.5 py-2 backdrop-blur-xl">
             {topStrip.map((team) => (
               <button
+                type="button"
                 key={team.id}
                 onClick={() => handleSelectTeam(team.id)}
                 className={cn(
@@ -310,6 +326,18 @@ export function GalaxyLeaderboardPage() {
                 {team.name}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={handleOverview}
+              className={cn(
+                'rounded-lg border px-2.5 py-1 text-xs transition',
+                selectedTeamId === null
+                  ? 'border-sky-200/40 bg-sky-200/15 text-white shadow-[0_0_8px_rgba(125,211,252,0.15)]'
+                  : 'border-white/10 bg-white/[0.04] text-slate-300 hover:border-white/25 hover:bg-white/10 hover:text-white',
+              )}
+            >
+              Overview
+            </button>
           </div>
         </div>
       </div>

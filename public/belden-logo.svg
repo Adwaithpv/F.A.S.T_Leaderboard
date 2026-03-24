@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" fill="none">
+  <!-- Belden Logo Icon -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="miter" stroke-linecap="square">
+    <path d="M 20,100 L 20,20 L 50,20 L 70,40 L 70,55 L 55,70 L 75,90 L 75,100 Z" />
+    <path d="M 35,100 L 35,35 L 45,35 L 55,45 L 55,50 L 45,60 L 35,60" />
+    <path d="M 35,75 L 45,75 L 60,90 L 60,100 L 50,100 L 35,85" />
+  </g>
+  <!-- Belden Text -->
+  <text x="100" y="85" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="600" font-size="80" fill="#FFFFFF" letter-spacing="-2.5">Belden</text>
+</svg>

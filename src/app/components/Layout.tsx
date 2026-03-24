@@ -40,11 +40,11 @@ export function Layout() {
   const { games } = useTournament();
   const location = useLocation();
   const isGalaxyRoute = location.pathname === '/' || location.pathname.startsWith('/galaxy');
+  const isAdminRoute = location.pathname === '/admin';
   const [isNavOpen, setIsNavOpen] = useState(false);
 
   const links = [
-    { to: '/galaxy', label: 'Galaxy', icon: Orbit },
-    { to: '/overview', label: 'Overview', icon: Trophy },
+    { to: '/galaxy', label: 'Solar System', icon: Orbit },
     ...games.map(g => ({
       to: `/game/${g.id}`,
       label: g.name,
@@ -53,46 +53,23 @@ export function Layout() {
     { to: '/admin', label: 'Admin Panel', icon: Settings },
   ];
 
+  const sponsorLogos = [
+    { src: '/belden-logo.png', alt: 'Belden' },
+    { src: '/bmw-logo.svg', alt: 'BMW' },
+    { src: '/neevcloud-logo.svg', alt: 'NeevCloud' },
+  ];
+
   return (
     <div className="min-h-screen bg-[#000000] text-white selection:bg-[#76B900]/30 overflow-x-hidden">
       {/* Dynamic Gaming Background */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden bg-[#0A0A0A]">
-        {/* Animated Tech Grid */}
-        <div 
-          className="absolute inset-[0] w-[200%] h-[200%] left-[-50%] top-[-50%]" 
-          style={{
-            backgroundImage: `
-              linear-gradient(to right, rgba(118, 185, 0, 0.15) 1px, transparent 1px),
-              linear-gradient(to bottom, rgba(118, 185, 0, 0.15) 1px, transparent 1px)
-            `,
-            backgroundSize: '40px 40px',
-            transform: 'perspective(1000px) rotateX(60deg) translateY(-100px) translateZ(-200px)',
-            animation: 'grid-pan 3s linear infinite',
-            maskImage: 'radial-gradient(ellipse 100% 100% at 50% 50%, black 10%, transparent 60%)',
-            WebkitMaskImage: 'radial-gradient(ellipse 100% 100% at 50% 50%, black 10%, transparent 60%)'
-          }}
-        />
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden bg-[#000000]">
+        {/* Removed grid and giant green glows to let authentic space background shine */}
         
-        {/* Particle System */}
-        <Particles />
-
-        {/* Dynamic Sweeping Glows */}
-        <motion.div 
-          className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#76B900] opacity-[0.08] blur-[120px] rounded-full mix-blend-screen" 
-          animate={{ x: [0, 100, 0], y: [0, 50, 0], scale: [1, 1.1, 1] }} 
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }} 
-        />
-        <motion.div 
-          className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-[#76B900] opacity-[0.08] blur-[120px] rounded-full mix-blend-screen"
-          animate={{ x: [0, -100, 0], y: [0, -50, 0], scale: [1, 1.2, 1] }} 
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }} 
-        />
+        {/* Subtle Scanlines Effect for HUD aesthetic */}
+        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(to_bottom,transparent_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px] opacity-10" />
         
-        {/* Scanlines Effect */}
-        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(to_bottom,transparent_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px] opacity-20" />
-        
-        {/* Vignette Overlay */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#000000_100%)] opacity-80" />
+        {/* Edge Vignette Overlay */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#000000_100%)] opacity-60" />
       </div>
 
       <header className={`fixed z-50 top-0 left-0 w-full transition-all duration-300 ${isGalaxyRoute && !isNavOpen ? 'bg-transparent border-transparent' : 'border-b border-[#333333]/50 bg-[#0A0A0A]/80 backdrop-blur-xl'}`}>
@@ -114,9 +91,21 @@ export function Layout() {
               <h1 className="text-xl sm:text-2xl font-bold font-display tracking-widest text-[#FFFFFF] drop-shadow-[0_0_8px_rgba(118,185,0,0.5)]">
                 FASTATHON LEADERBOARD
               </h1>
+              {!isAdminRoute ? (
+                <div className="hidden items-center gap-8 md:flex ml-4">
+                  {sponsorLogos.map((logo) => (
+                    <img
+                      key={logo.alt}
+                      src={logo.src}
+                      alt={logo.alt}
+                      className="h-10 w-auto object-contain"
+                    />
+                  ))}
+                </div>
+              ) : null}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <BackgroundAudio />
             </div>
           </div>

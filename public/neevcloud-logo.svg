@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 350 100" fill="none">
+  <g fill="#FFFFFF">
+    <!-- Left pillar -->
+    <path d="M10,40 h14 v40 h-14 z" />
+    <!-- Top step -->
+    <path d="M24,25 h14 v15 h-14 z" />
+    <!-- Right pillar -->
+    <path d="M38,35 h14 v45 h-14 z" />
+  </g>
+  <text x="65" y="73" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="46" fill="#FFFFFF" letter-spacing="-2.5">neevcloud</text>
+</svg>
