@@ -5,8 +5,8 @@ import { NeonButton, cn } from '../components/NeonButton';
 import * as LucideIcons from 'lucide-react';
 import { Save, RefreshCw, Settings, UserPlus, X, Edit2, Orbit, Gamepad2, Plus } from 'lucide-react';
 
-const getIconComponent = (iconName: string, fallback: React.ComponentType<{ size?: number; color?: string; className?: string }>) =>
-  (LucideIcons as Record<string, React.ComponentType<{ size?: number; color?: string; className?: string }>>)[
+const getIconComponent = (iconName: string, fallback: any) =>
+  (LucideIcons as any)[
     iconName.charAt(0).toUpperCase() + iconName.slice(1).replace(/-./g, (x) => x[1].toUpperCase())
   ] ?? fallback;
 
@@ -76,7 +76,7 @@ export function AdminPanel() {
   const resetLocalScores = () => {
     const reset: Record<string, number> = {};
     activeTeams.forEach((team) => {
-      reset[team.id] = activeGame ? scores[activeGame.id]?.[selectedRound]?.[team.id] ?? 0 : 0;
+      reset[team.id] = 0; // Set all input scores to 0
     });
     setLocalScores(reset);
   };
