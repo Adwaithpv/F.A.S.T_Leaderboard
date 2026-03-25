@@ -156,7 +156,7 @@ export function AdminPanel() {
           className="flex w-full flex-col gap-4"
           onSubmit={(e) => {
             e.preventDefault();
-            if (passwordInput === 'admin123') {
+            if (passwordInput === 'fastathon1.02026') {
               setIsAuthenticated(true);
             } else {
               alert('Access Denied');
