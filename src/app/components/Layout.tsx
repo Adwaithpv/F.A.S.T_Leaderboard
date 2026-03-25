@@ -56,8 +56,8 @@ export function Layout() {
 
   const sponsorLogos = [
     { src: '/belden-logo.png', alt: 'Belden' },
-    { src: '/bmw-logo.svg', alt: 'BMW' },
-    { src: '/neevcloud-logo.svg', alt: 'NeevCloud' },
+    { src: '/bmw-header.png', alt: 'BMW' },
+    { src: '/ncloud.png', alt: 'NeevCloud' },
   ];
 
   return (
