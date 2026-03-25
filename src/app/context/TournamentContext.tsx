@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { ref, onValue, update } from 'firebase/database';
+import { ref, onValue, update, set } from 'firebase/database';
 import { db, isFirebaseConfigured } from '../../imports/firebase';
 
 export type Team = {
@@ -303,7 +303,9 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
             defaultRounds.map(r => [r.id, defaultTeams.map(t => t.id)])
           ),
         };
-        update(ref(db, LEADERBOARD_PATH), seed);
+        // Sanitize `undefined` values that Firebase hates and use `set` instead of `update`
+        // `update` fails if the object structure isn't exactly a dictionary of updates.
+        set(ref(db, LEADERBOARD_PATH), JSON.parse(JSON.stringify(seed)));
         return;
       }
 
@@ -400,8 +402,8 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
     setRoundTeams(prev => {
       const next = { ...prev, [roundId]: [...(prev[roundId] || []), newTeamId] };
       if (db) {
-        update(ref(db, `${LEADERBOARD_PATH}/teams/${newTeamId}`), newTeam);
-        update(ref(db, `${LEADERBOARD_PATH}/roundTeams/${roundId}`), next[roundId]);
+        set(ref(db, `${LEADERBOARD_PATH}/teams/${newTeamId}`), JSON.parse(JSON.stringify(newTeam)));
+        set(ref(db, `${LEADERBOARD_PATH}/roundTeams/${roundId}`), next[roundId]);
       }
       return next;
     });
@@ -411,7 +413,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
     setRoundTeams(prev => {
       const next = { ...prev, [roundId]: (prev[roundId] || []).filter(id => id !== teamId) };
       if (db) {
-        update(ref(db, `${LEADERBOARD_PATH}/roundTeams/${roundId}`), next[roundId]);
+        set(ref(db, `${LEADERBOARD_PATH}/roundTeams/${roundId}`), next[roundId]);
       }
       return next;
     });
@@ -422,7 +424,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
       const next = prev.map(t => t.id === teamId ? { ...t, ...updates } : t);
       const team = next.find(t => t.id === teamId);
       if (db && team) {
-        update(ref(db, `${LEADERBOARD_PATH}/teams/${teamId}`), updates);
+        update(ref(db, `${LEADERBOARD_PATH}/teams/${teamId}`), JSON.parse(JSON.stringify(updates)));
       }
       return next;
     });
@@ -446,7 +448,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
         [newGameId]: nextGameScores,
       };
       if (db) {
-        update(ref(db, `${LEADERBOARD_PATH}/games/${newGameId}`), newGame);
+        set(ref(db, `${LEADERBOARD_PATH}/games/${newGameId}`), JSON.parse(JSON.stringify(newGame)));
         update(ref(db, `${LEADERBOARD_PATH}/scores/${newGameId}`), nextGameScores);
       }
       return next;
@@ -457,7 +459,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
     setGames((prev) => {
       const next = prev.map((game) => (game.id === gameId ? { ...game, ...updates } : game));
       if (db) {
-        update(ref(db, `${LEADERBOARD_PATH}/games/${gameId}`), updates);
+        update(ref(db, `${LEADERBOARD_PATH}/games/${gameId}`), JSON.parse(JSON.stringify(updates)));
       }
       return next;
     });
@@ -474,7 +476,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
         },
       };
       if (db) {
-        update(ref(db, `${LEADERBOARD_PATH}/roundVisualization/${roundId}`), next[roundId]);
+        set(ref(db, `${LEADERBOARD_PATH}/roundVisualization/${roundId}`), next[roundId]);
       }
       return next;
     });
